@@ -1,0 +1,178 @@
+            
+                <table cellspacing="0" border="1">
+                    <tr style="background-color:DarkGray;">
+                        <th rowspan="2">Site</th>			
+                        <th rowspan="2">Category</th>
+                        <th rowspan="2">Total Corrections</th>
+                        <th colspan="2" style="text-align: center;">Status</th>
+                        <th rowspan="2">Remarks</th>   
+                    </tr>
+                    <tr style="background-color:DarkGray;">
+                            
+                            <th>Open</th>
+                            <th>close</th>
+                              
+                    </tr>
+                                                
+                                
+                                                                                                    <tr>
+                                                                        <th rowspan="1"></th>
+                                                                        <th>Blank Call</th>
+                                    <td>1</td>
+                                    <td></td>
+                                    <td>1</td>
+                                    <td></td>
+                                    
+                                    </tr>
+                                      
+                                    
+                                    <tr>
+                                                                                    <th colspan="2">Total</th>
+                                            <th>1</th>
+                                            <th>0</th>
+                                            <th>1</th>
+                                            <th>1</th>
+                                            
+                                    </tr>
+                            
+                                                            
+                                
+                                                                                                    <tr>
+                                                                        <th rowspan="2">Phase 1</th>
+                                                                        <th>Horticulture</th>
+                                    <td>4</td>
+                                    <td></td>
+                                    <td>4</td>
+                                    <td></td>
+                                    
+                                    </tr>
+                                                                        <tr>
+                                                                        <th>Electrical</th>
+                                    <td>1</td>
+                                    <td></td>
+                                    <td>1</td>
+                                    <td></td>
+                                    
+                                    </tr>
+                                      
+                                    
+                                    <tr>
+                                                                                    <th colspan="2">Total</th>
+                                            <th>5</th>
+                                            <th>0</th>
+                                            <th>5</th>
+                                            <th>1</th>
+                                            
+                                    </tr>
+                            
+                                                            
+                                
+                                                                                                    <tr>
+                                                                        <th rowspan="2">Phase 2</th>
+                                                                        <th>General Maintenance</th>
+                                    <td>1</td>
+                                    <td></td>
+                                    <td>1</td>
+                                    <td></td>
+                                    
+                                    </tr>
+                                                                        <tr>
+                                                                        <th>Security</th>
+                                    <td>2</td>
+                                    <td></td>
+                                    <td>2</td>
+                                    <td></td>
+                                    
+                                    </tr>
+                                      
+                                    
+                                    <tr>
+                                                                                    <th colspan="2">Total</th>
+                                            <th>3</th>
+                                            <th>0</th>
+                                            <th>3</th>
+                                            <th>1</th>
+                                            
+                                    </tr>
+                            
+                                                            
+                                
+                                                                                                    <tr>
+                                                                        <th rowspan="1">Phase 3</th>
+                                                                        <th>Water</th>
+                                    <td>3</td>
+                                    <td></td>
+                                    <td>3</td>
+                                    <td></td>
+                                    
+                                    </tr>
+                                      
+                                    
+                                    <tr>
+                                                                                    <th colspan="2">Total</th>
+                                            <th>3</th>
+                                            <th>0</th>
+                                            <th>3</th>
+                                            <th>1</th>
+                                            
+                                    </tr>
+                            
+                                                            
+                                
+                                                                                                    <tr>
+                                                                        <th rowspan="4">Phase 4</th>
+                                                                        <th>Electrical</th>
+                                    <td>4</td>
+                                    <td></td>
+                                    <td>4</td>
+                                    <td></td>
+                                    
+                                    </tr>
+                                                                        <tr>
+                                                                        <th>General Maintenance</th>
+                                    <td>1</td>
+                                    <td></td>
+                                    <td>1</td>
+                                    <td></td>
+                                    
+                                    </tr>
+                                                                        <tr>
+                                                                        <th>Water</th>
+                                    <td>3</td>
+                                    <td></td>
+                                    <td>3</td>
+                                    <td></td>
+                                    
+                                    </tr>
+                                                                        <tr>
+                                                                        <th>Horticulture</th>
+                                    <td>1</td>
+                                    <td></td>
+                                    <td>1</td>
+                                    <td></td>
+                                    
+                                    </tr>
+                                      
+                                    
+                                    <tr>
+                                                                                    <th colspan="2">Total</th>
+                                            <th>9</th>
+                                            <th>0</th>
+                                            <th>9</th>
+                                            <th>1</th>
+                                            
+                                    </tr>
+                            
+                                    
+                                    <tr>
+                                            <th style="background-color:yellow;" colspan="2">Grand Total</th>
+                                            <th style="background-color:yellow;">21</th>
+                                            <th style="background-color:yellow;">0</th>
+                                            <th style="background-color:yellow;">21</th>
+                                            <th style="background-color:yellow;">1.00</th>
+                                    </tr>
+                        								
+                 
+                </table> 
+
+                

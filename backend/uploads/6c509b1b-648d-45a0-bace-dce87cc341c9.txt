@@ -1,0 +1,160 @@
+{
+  "CYBX_Master_QA_Prompt": {
+    "Instructions": "Please analyze the following CYBX customer care conversation between an agent and a customer. Classify, score, and evaluate as per the defined framework. Do not deduct marks for grammar or minor pronunciation issues. Only flag major clarity issues that hinder customer understanding separately in feedback but not in scoring. Do not penalize the agent for not performing troubleshooting or escalation, as CYBX agents are only required to acknowledge, assure, and confirm that the concerned team will coordinate with the customer.",
+
+    "classification": {
+      "Scenario (Primary Classification)": [
+        "Application Related Queries",
+        "Insurance Related Queries",
+        "Assistance in Reporting Cybercrime",
+        "Tech Related Queries",
+        "Other"
+      ],
+      "Sub Scenario (Secondary Classification)": {
+        "Application Related Queries": [
+          "Installation",
+          "Subscription",
+          "Payment",
+          "Other",
+          "Features Related Query",
+          "Subscription Related Queries"
+        ],
+        "Insurance Related Queries": [
+          "Claim help",
+          "Policy info",
+          "Other"
+        ],
+        "Assistance in Reporting Cybercrime": [
+          "Cybercrime",
+          "Online frauds",
+          "Scams",
+          "Hacking",
+          "Other"
+        ],
+        "Tech Related Queries": [
+          "Technical issue",
+          "Bugs",
+          "Other"
+        ],
+        "Other": [
+          "Blank Call",
+          "Call Disconnected Without Response",
+          "Wrong Number",
+          "Feedback Call"
+        ]
+      },
+      "Sub Scenario 2": "Application Related Queries, Insurance Related Queries, Assistance in Reporting Cybercrime, Tech Related Queries, Other",
+      "Sub Scenario 3": "Deeper breakdown if applicable",
+      "Caller Name": "<Extracted Caller Name>",
+      "Registered Contact No": "<Extracted Registered Contact No>",
+      "Email ID": "<Extracted Email ID>",
+      "Remarks": "<Brief remarks as per customer VOC>",
+      "Select Ticket Status": "Closed"
+    },
+
+    "quality_parameters": {
+      "Critical Parameters": [
+        "Did the agent maintain professionalism without rude behavior?",
+        "Did the agent provide correct and complete information (as per CYBX process)?"
+      ],
+      "Scoring Parameters (1 or 0 with Examples)": {
+        "Did the agent follow the correct opening?": {
+          "Correct": ["Good morning, thank you for calling CYBX. How may I help you?",
+                      "Thank you for calling CYBX. How may I assist you today?"],
+          "Incorrect": ["Hello?", "Yes?", "Good morning (without CYBX)"]
+        },
+        "Did the agent maintain professionalism without rude behavior?": 1,
+        "Did the agent use assurance or appreciation phrases?": {
+          "Correct": ["I assure you, your issue will be resolved as soon as possible.",
+                      "Our concerned team will coordinate with you shortly.",
+                      "We really appreciate your patience."],
+          "Incorrect": ["Wait for some time.", "I don’t know."]
+        },
+        "Did the agent express empathy using keywords?": {
+          "Correct": ["I completely understand how frustrating this must be for you."],
+          "Incorrect": ["It happens, just deal with it."]
+        },
+        "Did the agent speak with enthusiasm (without fumbling)?": {
+          "Correct": ["Sure, I’ll be happy to assist you with your subscription query."],
+          "Incorrect": ["Uh… wait… okay… what were you saying again?"]
+        },
+        "Was the agent polite and free of sarcasm?": {
+          "Correct": ["I’ll definitely look into this for you."],
+          "Incorrect": ["Obviously you should know this already."]
+        },
+        "Did the agent actively listen without interrupting?": {
+          "Correct": ["Yes, I understand you are facing this issue. Let me check details."],
+          "Incorrect": ["Cutting off customer mid-sentence."]
+        },
+        "Did the agent accurately probe to understand the issue?": {
+          "Correct": ["Can you confirm which feature you are facing difficulty with?"],
+          "Incorrect": ["Okay, I’ll just note it without confirming."]
+        },
+        "Did the agent inform before hold?": {
+          "Correct": ["May I place your call on hold for a moment while I check this?"],
+          "Incorrect": ["(Silence and directly puts call on hold)"]
+        },
+        "Did the agent thank after retrieving the call from hold?": {
+          "Correct": ["Thank you for holding, I appreciate your patience."],
+          "Incorrect": ["Okay, now tell me again…"]
+        },
+        "Was the customer informed about the steps being taken?": {
+          "Correct": ["I have noted your concern and our team will coordinate with you as soon as possible."],
+          "Incorrect": ["I don’t know what will happen."]
+        },
+        "Did the agent provide clear timelines for resolution?": {
+          "Correct": ["Our team will coordinate with you shortly and resolve this at the earliest."],
+          "Incorrect": ["It’ll be done soon."]
+        },
+        "Did the agent provide a proper closure?": {
+          "Correct": ["Is there anything else I can assist you with today?",
+                      "Thank you for calling CYBX, have a safe day ahead."],
+          "Incorrect": ["Okay bye.", "Disconnecting abruptly."]
+        }
+      },
+      "Scoring Rule": "Total score = Sum of 1s, Max score = 11 (excluding Grammar, Pronunciation). Quality % = (Total / 11) × 100. If any critical parameter is 0, Quality % = 0.",
+      "Ranking": {
+        "90% and above": "Excellent",
+        "56%-89%": "Good",
+        "50%-55%": "Average",
+        "Below 50%": "Needs Improvement"
+      }
+    },
+
+    "fraud_metrics": {
+      "Data Theft or Misuse": "Did the agent mishandle sensitive customer information (card details, CVV, OTP, Aadhaar)? Yes/No",
+      "Unprofessional Behavior": "Was there any instance of unprofessional behavior? Yes/No",
+      "System Manipulation": "Did the agent bypass mandatory verifications or manipulate systems? Yes/No",
+      "Financial Fraud": "Was there any indication of unauthorized benefits or misleading in financial transactions? Yes/No",
+      "Escalation Failure": "Not Applicable (CYBX agents do not escalate, only assure customer of team coordination)",
+      "Collusion": "Was there any unethical collaboration/collusion by the agent? Yes/No",
+      "Policy Communication Failure": "Did the agent provide incorrect/misleading policy info? Yes/No",
+      "Areas for Improvement": "Any specific improvement required? Yes/No"
+    },
+
+    "sentiment_analysis": {
+      "top_positive_words": ["great app","very helpful","safe and secure","satisfied","issue resolved","quick response","friendly support","appreciate","grateful","good experience"],
+      "top_negative_words": ["not working","slow response","still unresolved","confusing process","disappointed","long wait","unhelpful","frustrating","poor service","unclear instructions"],
+      "top_positive_words_agent": ["I assure you","Our team will coordinate","We appreciate your patience","Glad to assist","Happy to help","Thank you for holding","Is there anything else I can assist with?","Have a safe day ahead"will       resolve this shortly","I completely understand"],
+      "top_negative_words_agent": ["I don’t know","Wait for some time","Cannot confirm right now","System error occurred","Please wait","Unable to process","No option available","We might take more time","Silence / delay on hold","Not       sure about resolution"],
+      "cuss_words": {
+        "agent": {
+          "english": { "list": [], "count": 0 },
+          "hindi": { "list": [], "count": 0 }
+        },
+        "customer": {
+          "english": { "list": [], "count": 0 },
+          "hindi": { "list": [], "count": 0 }
+        }
+      }
+    },
+
+    "competitor_analysis": {
+      "Competitor Name": "<If customer mentions e.g., Norton, McAfee, Kaspersky, etc.>",
+      "Positive Comparison": "<If customer praises CYBX over competitor>",
+      "Reason for Positive Comparison": "<Why CYBX is better in customer’s view>",
+      "Exact Positive Language": "<Customer’s exact words>"
+    }
+  }
+}
+### Conversation:
