@@ -87,6 +87,14 @@ def read_users(
     users = query.offset(skip).limit(limit).all()
     return users
 
+@router.get("/all-users", response_model=List[UserSchema])
+def read_all_users(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+
+    return db.query(User).all()
+
 @router.get("/me", response_model=UserSchema)
 def read_user_me(current_user: User = Depends(get_current_active_user)):
     return current_user

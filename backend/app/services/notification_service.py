@@ -91,7 +91,7 @@ def send_email_notification(
             cc_emails=cc_emails or []
         )
         logger.info(f"Email would be sent to {user.email}: {subject}")
-        print(f"Email would be sent to {user.email}: {subject}")
+        print(f"Email would be sent to {user.email}: {subject} and cc {cc_emails}")
 
         return True
         # For now, just log it
@@ -273,29 +273,72 @@ def notify_ticket_status_changed(db: Session, ticket_id: int, user_ids: list, ch
                 related_user_id=changer_id
             )
 
-            # Send email only when ticket is closed/done
-            if new_status.lower() == "done":
-                send_email_notification(
-                    db=db,
-                    user_id=user_id,
-                    type=NotificationType.TICKET_STATUS_CHANGED,
-                    subject=f"Ticket #{ticket_id} Closed - {ticket_title}",
-                    body=f"""
-                        Hello,
+    # Send ONE email only when ticket is Done
+    if new_status.lower() != "done":
+        return
 
-                        The following ticket has been marked as Done and closed.
+    reporter = db.query(User).filter(User.id == ticket.reporter_id).first()
+    assignee = (
+        db.query(User).filter(User.id == ticket.assignee_id).first()
+        if ticket.assignee_id
+        else None
+    )
 
-                        Ticket ID : #{ticket_id}
-                        Title     : {ticket_title}
-                        Status    : {new_status}
+    if not reporter:
+        return
 
-                        If the issue is not resolved, please reopen the ticket.
+    cc_emails = set()
 
-                        Regards,
-                        Support Team
-                    """,
-                    ticket_id=ticket_id
-                )
+    # Assignee
+    if assignee and assignee.email:
+        cc_emails.add(assignee.email)
+
+    # PMs from reporter branch
+    if reporter.branch_id:
+        pm_emails = (
+            db.query(User.email)
+            .filter(
+                User.branch_id == reporter.branch_id,
+                User.role == "pm",
+            )
+            .all()
+        )
+        cc_emails.update(email for (email,) in pm_emails)
+
+    # PMs from assignee branch
+    if assignee and assignee.branch_id:
+        pm_emails = (
+            db.query(User.email)
+            .filter(
+                User.branch_id == assignee.branch_id,
+                User.role == "pm",
+            )
+            .all()
+        )
+        cc_emails.update(email for (email,) in pm_emails)
+
+    # Don't CC the reporter
+    cc_emails.discard(reporter.email)
+
+    send_email(
+        to_email=reporter.email,
+        subject=f"Ticket #{ticket_id} Closed - {ticket_title}",
+        body=f"""
+            Hello,
+
+            The following ticket has been marked as Done and closed.
+
+            Ticket ID : #{ticket_id}
+            Title     : {ticket_title}
+            Status    : {new_status}
+
+            If the issue is not resolved, please reopen the ticket.
+
+            Regards,
+            Support Team
+            """,
+        cc_emails=list(cc_emails),
+    )
 
 def get_or_create_preferences(db: Session, user_id: int) -> NotificationPreference:
     """Get or create notification preferences for user"""

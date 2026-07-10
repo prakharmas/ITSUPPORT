@@ -347,13 +347,13 @@ def start_scheduler():
     )
 
     # Ticket reminders every 9 AM 
-    # scheduler.add_job(
-    #     ticket_reminders,
-    #     trigger=CronTrigger(hour=9, minute=0),
-    #     id="ticket_reminders",
-    #     name="Ticket Reminders",
-    #     replace_existing=True
-    # )
+    scheduler.add_job(
+        ticket_reminders,
+        trigger=CronTrigger(hour=9, minute=0),
+        id="ticket_reminders",
+        name="Ticket Reminders",
+        replace_existing=True
+    )
     
     scheduler.start()
     logger.info("Scheduler started with autopilot jobs")
