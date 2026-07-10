@@ -349,7 +349,7 @@ def start_scheduler():
     # Ticket reminders every 9 AM 
     scheduler.add_job(
         ticket_reminders,
-        trigger=CronTrigger(hour=9, minute=0),
+        trigger=CronTrigger(day_of_week="mon", hour=9, minute=0),
         id="ticket_reminders",
         name="Ticket Reminders",
         replace_existing=True

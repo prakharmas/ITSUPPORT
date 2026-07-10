@@ -15,6 +15,7 @@ import {
   ArrowRightIcon,
   XMarkIcon
 } from '@heroicons/react/24/outline'
+import toast from 'react-hot-toast'
 
 export default function Dashboard() {
   const { user } = useAuth()
@@ -66,7 +67,7 @@ export default function Dashboard() {
 
   const fetchUsers = async () => {
     try {
-      const response = await api.get('/users')
+      const response = await api.get('/users/all-users')
       setUsers(response.data)
     } catch (error) {
       console.error('Failed to fetch users:', error)
@@ -233,8 +234,28 @@ export default function Dashboard() {
     return reporter?.name || `User ${reporterId}`
   }
 
-  const exportModalTickets = () => {
-    if (!detailModal.items.length) return
+const exportModalTickets = async () => {
+  if (!filteredModalItems.length) return
+
+  try {
+    toast.loading('Preparing export...', { id: 'export' })
+
+    const ticketsWithComments = await Promise.all(
+      filteredModalItems.map(async (item) => {
+        try {
+          const response = await api.get(`/items/${item.id}/comments`)
+          return {
+            ...item,
+            comments: response.data
+          }
+        } catch {
+          return {
+            ...item,
+            comments: []
+          }
+        }
+      })
+    )
 
     const headers = [
       'S.No',
@@ -247,42 +268,79 @@ export default function Dashboard() {
       'Pending By',
       'Target Date',
       'Status',
-      'Remarks'
+      'Remarks',
+      'Comments'
     ]
 
-    const rows = detailModal.items.map((item, index) => [
-      index + 1,
-      getBranchName(item.branch_id),
-      item.title || '',
-      `#${item.id}`,
-      formatDate(item.created_at),
-      getReporterName(item.reporter_id),
-      getAssigneeName(item.assignee_id),
-      getPendingBy(item.status),
-      formatDate(item.end_date || item.due_at),
-      getStatusLabel(item.status),
-      item.description || '-'
-    ])
+    const rows = ticketsWithComments.map((item, index) => {
+      const commentsText = (item.comments || [])
+        .filter(comment => {
+          const body = comment.body || ''
+
+          return !(
+            body.includes('Status changed') ||
+            body.includes('REOPENED') ||
+            body.includes('assigned')
+          )
+        })
+        .map(comment => {
+          const userName =
+            users.find(u => u.id === comment.user_id)?.name ||
+            `User ${comment.user_id}`
+
+          return `[${new Date(comment.created_at).toLocaleString()}] ${userName}
+${comment.body}`
+        })
+        .join('\n\n')
+
+      return [
+        index + 1,
+        getBranchName(item.branch_id),
+        item.title || '',
+        `#${item.id}`,
+        formatDate(item.created_at),
+        getReporterName(item.reporter_id),
+        getAssigneeName(item.assignee_id),
+        getPendingBy(item.status),
+        formatDate(item.end_date || item.due_at),
+        getStatusLabel(item.status),
+        item.description || '-',
+        commentsText || '-'
+      ]
+    })
 
     const csv = [
       headers.join(','),
-      ...rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      ...rows.map(row =>
+        row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')
+      )
     ].join('\n')
 
     const dateStr = new Date().toISOString().split('T')[0]
-    const fileName = `${detailModal.title.toLowerCase().replace(/\s+/g, '_')}_tickets_${dateStr}.csv`
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const fileName = `${detailModal.title
+      .toLowerCase()
+      .replace(/\s+/g, '_')}_tickets_${dateStr}.csv`
+
+    const blob = new Blob(['\uFEFF' + csv], {
+      type: 'text/csv;charset=utf-8;'
+    })
+
     const link = document.createElement('a')
     const url = URL.createObjectURL(blob)
-    link.setAttribute('href', url)
-    link.setAttribute('download', fileName)
-    link.style.visibility = 'hidden'
+
+    link.href = url
+    link.download = fileName
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
     URL.revokeObjectURL(url)
-  }
 
+    toast.success('Export completed', { id: 'export' })
+  } catch (err) {
+    console.error(err)
+    toast.error('Export failed', { id: 'export' })
+  }
+}
   const openDetailModal = (cardKey, cardLabel) => {
     const now = new Date()
     const threeDaysAgo = new Date(now.getTime() - (3 * 24 * 60 * 60 * 1000))
