@@ -11,6 +11,7 @@ import ActivityReports from './pages/ActivityReports'
 import Reports from './pages/Reports'
 import TimeReports from './pages/TimeReports'
 import Settings from './pages/Settings'
+import ClientAnalysis from './pages/ClientAnalysis'
 
 function App() {
   const { user, loading } = useAuth()
@@ -44,6 +45,7 @@ function App() {
         <Route path="/reports" element={<Reports />} />
         <Route path="/time-reports" element={<TimeReports />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/client-analysis" element={<ClientAnalysis />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>

@@ -9,10 +9,12 @@ import {
   UserCircleIcon,
   CalendarIcon,
   ClockIcon,
-  ChatBubbleLeftIcon
+  ChatBubbleLeftIcon,
+  XMarkIcon
 } from '@heroicons/react/24/outline'
 import TimeTracker from '../components/TimeTracker'
 import TimeEntriesList from '../components/TimeEntriesList'
+import CloseTicketModal from '../components/CloseTicketModal'
 
 export default function ItemDetail() {
   const { id } = useParams()
@@ -36,6 +38,7 @@ export default function ItemDetail() {
     end_date: ''
   })
   const [timeLoggedTrigger, setTimeLoggedTrigger] = useState(0)
+  const [showCloseModal, setShowCloseModal] = useState(false)
   const assignableUsers = users.filter(u => u.role === 'dev' || u.role === 'pm')
 
   useEffect(() => {
@@ -99,7 +102,7 @@ export default function ItemDetail() {
       })
       toast.success('📎 File uploaded successfully!')
       fetchAttachments()
-      e.target.value = '' // Reset input
+      e.target.value = ''
     } catch (error) {
       console.error('Failed to upload file:', error)
       toast.error(error.response?.data?.detail || 'Failed to upload file')
@@ -153,10 +156,8 @@ export default function ItemDetail() {
 
     setUpdatingStatus(true)
     try {
-      // Change status back to backlog
       await api.patch(`/items/${id}`, { status: 'backlog' })
       
-      // Add comment with reason
       await api.post(`/items/${id}/comments`, {
         body: `🔄 TICKET REOPENED by ${user.name}\nReason: ${reopenReason}`
       })
@@ -182,10 +183,8 @@ export default function ItemDetail() {
 
     setUpdatingStatus(true)
     try {
-      // Assign ticket
       await api.patch(`/items/${id}/assign`, { assignee_id: parseInt(assignData.assignee_id) })
       
-      // Update dates if provided
       const dateUpdates = {}
       if (assignData.start_date) {
         dateUpdates.start_date = new Date(assignData.start_date).toISOString()
@@ -198,7 +197,6 @@ export default function ItemDetail() {
         await api.patch(`/items/${id}`, dateUpdates)
       }
       
-      // Add comment about assignment
       const newAssignee = users.find(u => u.id === parseInt(assignData.assignee_id))
       let commentText = `👤 Ticket assigned to ${newAssignee?.name || 'developer'} by ${user.name}`
       if (assignData.start_date) commentText += `\n📅 Start: ${new Date(assignData.start_date).toLocaleDateString()}`
@@ -229,7 +227,7 @@ export default function ItemDetail() {
       toast.success('Comment added!')
       setCommentText('')
       fetchComments()
-      fetchItemDetails() // Refresh to update timestamp
+      fetchItemDetails()
     } catch (error) {
       console.error('Failed to add comment:', error)
       toast.error('Failed to add comment')
@@ -238,13 +236,19 @@ export default function ItemDetail() {
     }
   }
 
+  // Modified: Intercept 'done' status change to open modal
   const handleStatusChange = async (newStatus) => {
+    // If trying to set status to 'done', open the modal instead
+    if (newStatus === 'done') {
+      setShowCloseModal(true)
+      return
+    }
+
     setUpdatingStatus(true)
     try {
       await api.patch(`/items/${id}`, { status: newStatus })
       toast.success('Status updated!')
       
-      // Add automatic comment about status change
       await api.post(`/items/${id}/comments`, {
         body: `Status changed to: ${newStatus.replace('_', ' ').toUpperCase()}`
       })
@@ -348,8 +352,6 @@ export default function ItemDetail() {
       </div>
     )
   }
-
-  const canChangeStatus = (user?.role === 'dev' || user?.role === 'pm') && item.assignee_id === user.id
 
   return (
     <div className="w-full max-w-none space-y-4 animate-fade-in">
@@ -643,7 +645,6 @@ export default function ItemDetail() {
                 </h2>
               </div>
 
-              {/* Time Tracker Component */}
               {(user.role === 'pm' || item?.assignee_id === user.id) && (
                 <div className="mb-4">
                   <TimeTracker 
@@ -653,7 +654,6 @@ export default function ItemDetail() {
                 </div>
               )}
 
-              {/* Time Entries List */}
               <TimeEntriesList 
                 ticketId={parseInt(id)} 
                 onUpdate={timeLoggedTrigger}
@@ -670,7 +670,6 @@ export default function ItemDetail() {
               </h2>
             </div>
 
-            {/* Add Comment Form */}
             <form onSubmit={handleAddComment} className="mb-4">
               <textarea
                 value={commentText}
@@ -691,13 +690,12 @@ export default function ItemDetail() {
               </div>
             </form>
 
-            {/* Comments List */}
             <div className="space-y-2">
               {comments.length === 0 ? (
                 <p className="text-gray-500 text-center py-4">No comments yet</p>
               ) : (
                 comments.map((comment) => {
-                  const isSystemComment = comment.body.includes('Status changed') || comment.body.includes('REOPENED') || comment.body.includes('reassigned')
+                  const isSystemComment = comment.body.includes('Status changed') || comment.body.includes('REOPENED') || comment.body.includes('reassigned') || comment.body.includes('Ticket Closed')
                   return (
                     <div key={comment.id} className={`rounded-lg p-3 ${
                       isSystemComment ? 'bg-blue-50 border-l-4 border-blue-400' : 'bg-gray-50 border-l-4 border-gray-300'
@@ -725,7 +723,6 @@ export default function ItemDetail() {
 
         {/* Sidebar */}
         <div className="space-y-3">
-          {/* Details Card */}
           <div className="card">
             <h3 className="text-sm font-semibold text-gray-900 mb-2">Details</h3>
             
@@ -753,7 +750,6 @@ export default function ItemDetail() {
             </div>
           </div>
 
-          {/* Timeline Card */}
           <div className="card bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200">
             <h3 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-2">
               <CalendarIcon className="h-4 w-4 text-blue-600" />
@@ -821,7 +817,6 @@ export default function ItemDetail() {
             </div>
           </div>
 
-          {/* Duration Stats (if completed) */}
           {item.completed_at && (
             <div className="card bg-gradient-to-br from-green-50 to-emerald-50 border-green-300">
               <h3 className="text-sm font-semibold text-green-900 mb-2 flex items-center gap-2">
@@ -858,7 +853,6 @@ export default function ItemDetail() {
             </div>
           )}
 
-          {/* Quick Actions */}
           {user?.role === 'pm' && (
             <div className="card">
               <h3 className="text-sm font-semibold text-gray-900 mb-3">PM Actions</h3>
@@ -888,7 +882,6 @@ export default function ItemDetail() {
             </p>
             
             <div className="space-y-4">
-              {/* Developer Selection */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Developer *
@@ -910,7 +903,6 @@ export default function ItemDetail() {
                 </select>
               </div>
 
-              {/* Start Date */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   📅 Start Date <span className="text-gray-500">(Optional)</span>
@@ -924,7 +916,6 @@ export default function ItemDetail() {
                 <p className="text-xs text-gray-500 mt-1">When should work begin?</p>
               </div>
 
-              {/* Due Date */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   🏁 Due Date <span className="text-gray-500">(Optional)</span>
@@ -1002,7 +993,17 @@ export default function ItemDetail() {
           </div>
         </div>
       )}
+
+      {/* Close Ticket Modal */}
+      <CloseTicketModal
+        isOpen={showCloseModal}
+        onClose={() => setShowCloseModal(false)}
+        ticket={item}
+        onSuccess={() => {
+          fetchItemDetails()
+          fetchComments()
+        }}
+      />
     </div>
   )
 }
-

@@ -23,6 +23,18 @@ class ItemPriority(str, Enum):
     NORMAL = "normal"
     LOW = "low"
 
+class RCAStatus(str, Enum):
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    NOT_APPLICABLE = "not_applicable"
+
+class SolutionStatus(str, Enum):
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    NOT_APPLICABLE = "not_applicable"
+
 class WorkItemBase(BaseModel):
     title: str
     description: Optional[str] = None
@@ -30,11 +42,17 @@ class WorkItemBase(BaseModel):
     priority: ItemPriority = ItemPriority.NORMAL
     project_id: Optional[int] = None
     branch_id: Optional[int] = None
+    client_id: Optional[int] = None  # NEW
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
     due_at: Optional[datetime] = None
     sla_hours: Optional[int] = None
     estimated_hours: Optional[Decimal] = None
+    rca_status: Optional[RCAStatus] = RCAStatus.PENDING
+    solution_status: Optional[SolutionStatus] = SolutionStatus.PENDING
+    is_recurring: Optional[bool] = False
+    rca_notes: Optional[str] = None
+    solution_notes: Optional[str] = None
 
 class WorkItemCreate(WorkItemBase):
     assignee_id: Optional[int] = None
@@ -47,12 +65,18 @@ class WorkItemUpdate(BaseModel):
     priority: Optional[ItemPriority] = None
     project_id: Optional[int] = None
     branch_id: Optional[int] = None
+    client_id: Optional[int] = None  # NEW
     assignee_id: Optional[int] = None
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
     due_at: Optional[datetime] = None
     sla_hours: Optional[int] = None
     estimated_hours: Optional[Decimal] = None
+    rca_status: Optional[RCAStatus] = None
+    solution_status: Optional[SolutionStatus] = None
+    is_recurring: Optional[bool] = None
+    rca_notes: Optional[str] = None
+    solution_notes: Optional[str] = None
 
 class WorkItem(WorkItemBase):
     id: int

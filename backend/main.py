@@ -5,7 +5,7 @@ import uvicorn
 from dotenv import load_dotenv
 
 from app.database import init_db
-from app.routers import auth, users, items, oncall, reports, branches, activity_reports, notifications, attachments, time_tracking
+from app.routers import auth, users, items, oncall, reports, branches, activity_reports, notifications, attachments, time_tracking, clients
 from app.scheduler import start_scheduler
 
 load_dotenv()
@@ -30,7 +30,6 @@ app.add_middleware(
         "http://ticket.dialdesk.in:8030",
         "http://ticket.dialdesk.in",
         "http://172.12.13.96:3000"
-
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -48,6 +47,7 @@ app.include_router(activity_reports.router, prefix="/activity-reports", tags=["a
 app.include_router(notifications.router, prefix="/notifications", tags=["notifications"])
 app.include_router(attachments.router, prefix="/attachments", tags=["attachments"])
 app.include_router(time_tracking.router, prefix="/time-tracking", tags=["time-tracking"])
+app.include_router(clients.router, prefix="/clients", tags=["clients"])  # ADD THIS
 
 @app.get("/")
 async def root():

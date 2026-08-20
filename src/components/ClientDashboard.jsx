@@ -13,8 +13,7 @@ import {
   SparklesIcon,
   ArrowTrendingUpIcon,
   ArrowRightIcon,
-  XMarkIcon,
-  MagnifyingGlassIcon
+  XMarkIcon
 } from '@heroicons/react/24/outline'
 import toast from 'react-hot-toast'
 
@@ -50,10 +49,6 @@ export default function Dashboard() {
     items: []
   })
   const [searchTerm, setSearchTerm] = useState('')
-  const [similarityData, setSimilarityData] = useState({}) // Store similarity for each ticket
-  const [showSimilarityModal, setShowSimilarityModal] = useState(false)
-  const [selectedSimilarityTicket, setSelectedSimilarityTicket] = useState(null)
-  const [similarityTickets, setSimilarityTickets] = useState([])
 
   useEffect(() => {
     fetchDashboardData()
@@ -109,10 +104,6 @@ export default function Dashboard() {
         (a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)
       )
       setAllItems(items)
-      
-      // Fetch similarity for each ticket
-      await fetchSimilarityForTickets(items)
-      
       const now = new Date()
       const threeDaysAgo = new Date(now.getTime() - (3 * 24 * 60 * 60 * 1000))
       
@@ -177,11 +168,11 @@ export default function Dashboard() {
 
       let displayItems
       if (user?.role === 'pm') {
-        displayItems = items.slice(0, 10)
+        displayItems = items.slice(0, 5)
       } else if (user?.role === 'requester') {
-        displayItems = items.slice(0, 10)
+        displayItems = items.slice(0, 5)
       } else {
-        displayItems = myItems.slice(0, 10)
+        displayItems = myItems.slice(0, 5)
       }
       setRecentItems(displayItems)
     } catch (error) {
@@ -189,71 +180,6 @@ export default function Dashboard() {
     } finally {
       setLoading(false)
     }
-  }
-
-  // Fetch similarity for tickets
-  const fetchSimilarityForTickets = async (items) => {
-    try {
-      const similarityMap = {}
-      
-      // For each ticket, find similar tickets
-      for (const item of items) {
-        if (item.status === 'done' || item.status === 'rejected') continue
-        
-        try {
-          const params = new URLSearchParams()
-          params.append('title', item.title)
-          if (item.description) {
-            params.append('description', item.description.substring(0, 100))
-          }
-          params.append('limit', '3')
-          
-          const response = await api.get(`/items/similar/find?${params.toString()}`)
-          
-          // Filter out the current ticket itself
-          const similar = response.data.filter(t => t.id !== item.id)
-          
-          if (similar.length > 0) {
-            similarityMap[item.id] = similar
-          }
-        } catch (error) {
-          console.error(`Failed to fetch similarity for ticket ${item.id}:`, error)
-        }
-      }
-      
-      setSimilarityData(similarityMap)
-    } catch (error) {
-      console.error('Failed to fetch similarity data:', error)
-    }
-  }
-
-  // Get similarity for a ticket
-  const getSimilarityForTicket = (ticketId) => {
-    return similarityData[ticketId] || []
-  }
-
-  // Get highest similarity score for a ticket
-  const getHighestSimilarity = (ticketId) => {
-    const similar = getSimilarityForTicket(ticketId)
-    if (similar.length === 0) return null
-    return Math.max(...similar.map(t => t.similarity_score || 0))
-  }
-
-  // Get match level
-  const getMatchLevel = (score) => {
-    if (!score) return null
-    if (score >= 70) return { emoji: '🔴', label: 'High', color: 'text-red-600 bg-red-100' }
-    if (score >= 40) return { emoji: '🟡', label: 'Medium', color: 'text-yellow-600 bg-yellow-100' }
-    return { emoji: '🟢', label: 'Low', color: 'text-green-600 bg-green-100' }
-  }
-
-  const openSimilarityModal = (ticket) => {
-    const similar = getSimilarityForTicket(ticket.id)
-    if (similar.length === 0) return
-    
-    setSelectedSimilarityTicket(ticket)
-    setSimilarityTickets(similar)
-    setShowSimilarityModal(true)
   }
 
   const getStatusStyle = (status) => {
@@ -773,7 +699,7 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* Recent Items with Similarity */}
+      {/* Recent Items */}
       <div className="card">
         <div className="section-header">
           <div className="flex items-center gap-2">
@@ -801,169 +727,41 @@ export default function Dashboard() {
           </div>
         ) : (
           <div className="space-y-1.5">
-            {filteredRecentItems.map((item) => {
-              const highestScore = getHighestSimilarity(item.id)
-              const matchLevel = getMatchLevel(highestScore)
-              const similarCount = getSimilarityForTicket(item.id).length
-              
-              return (
-                <div key={item.id} className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200 hover:shadow-md transition-all group">
-                  <Link
-                    to={`/items/${item.id}`}
-                    className="flex-1 flex items-center gap-3 min-w-0"
-                  >
-                    <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600 font-bold text-xs group-hover:bg-indigo-100 group-hover:text-indigo-600 transition-all">
-                      #{item.id}
+            {filteredRecentItems.map((item) => (
+              <Link
+                key={item.id}
+                to={`/items/${item.id}`}
+                className="list-item-bordered group"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600 font-bold text-xs group-hover:bg-indigo-100 group-hover:text-indigo-600 transition-all">
+                    #{item.id}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-sm font-medium text-slate-800 group-hover:text-indigo-600 transition-colors truncate">
+                      {item.title}
+                    </h3>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className="text-xs text-slate-400 capitalize">{item.type}</span>
+                      <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${getPriorityStyle(item.priority)}`}>
+                        {item.priority}
+                      </span>
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <h3 className="text-sm font-medium text-slate-800 group-hover:text-indigo-600 transition-colors truncate">
-                        {item.title}
-                      </h3>
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        <span className="text-xs text-slate-400 capitalize">{item.type}</span>
-                        <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${getPriorityStyle(item.priority)}`}>
-                          {item.priority}
-                        </span>
-                        <span className={`badge border ${getStatusStyle(item.status)}`}>
-                          {getStatusLabel(item.status)}
-                        </span>
-                      </div>
-                    </div>
-                  </Link>
-                  
-                  <div className="flex items-center gap-3 flex-shrink-0">
-                    {/* Similarity Badge */}
-                    {highestScore && similarCount > 0 && (
-                      <button
-                        onClick={() => openSimilarityModal(item)}
-                        className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium ${matchLevel?.color || 'bg-gray-100 text-gray-600'} hover:opacity-80 transition-opacity border border-transparent hover:border-gray-300`}
-                        title={`${similarCount} similar ticket${similarCount > 1 ? 's' : ''} found. Click to view.`}
-                      >
-                        <MagnifyingGlassIcon className="h-3 w-3" />
-                        {matchLevel?.emoji} {highestScore}%
-                        <span className="text-xs text-gray-400 ml-0.5">
-                          ({similarCount})
-                        </span>
-                      </button>
-                    )}
-                    
-                    <span className="text-xs text-slate-400 hidden sm:block">
-                      {item.due_at ? new Date(item.due_at).toLocaleDateString() : '-'}
-                    </span>
                   </div>
                 </div>
-              )
-            })}
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <span className={`badge border ${getStatusStyle(item.status)}`}>
+                    {getStatusLabel(item.status)}
+                  </span>
+                  <span className="text-xs text-slate-400 hidden sm:block">
+                    {item.due_at ? new Date(item.due_at).toLocaleDateString() : '-'}
+                  </span>
+                </div>
+              </Link>
+            ))}
           </div>
         )}
       </div>
-
-      {/* Similarity Modal */}
-      {showSimilarityModal && selectedSimilarityTicket && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[85vh] flex flex-col">
-            <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                  <MagnifyingGlassIcon className="h-5 w-5 text-yellow-600" />
-                  Similar Tickets for #{selectedSimilarityTicket.id}
-                </h2>
-                <p className="text-sm text-gray-500 truncate max-w-md">{selectedSimilarityTicket.title}</p>
-              </div>
-              <button
-                onClick={() => setShowSimilarityModal(false)}
-                className="p-1.5 hover:bg-gray-100 rounded-lg"
-              >
-                <XMarkIcon className="h-5 w-5 text-gray-500" />
-              </button>
-            </div>
-
-            <div className="p-4 overflow-y-auto flex-1">
-              <div className="mb-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                <p className="text-sm text-blue-800">
-                  <strong>Current Ticket:</strong> #{selectedSimilarityTicket.id} - {selectedSimilarityTicket.title}
-                </p>
-                <div className="flex gap-2 mt-1">
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${getStatusStyle(selectedSimilarityTicket.status)}`}>
-                    {getStatusLabel(selectedSimilarityTicket.status)}
-                  </span>
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${getPriorityStyle(selectedSimilarityTicket.priority)}`}>
-                    {selectedSimilarityTicket.priority}
-                  </span>
-                </div>
-              </div>
-
-              {similarityTickets.length === 0 ? (
-                <div className="text-center py-8">
-                  <p className="text-gray-500">No similar tickets found</p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {similarityTickets.map((ticket) => {
-                    const matchLevel = getMatchLevel(ticket.similarity_score)
-                    return (
-                      <div key={ticket.id} className="p-3 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors">
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-sm font-medium text-gray-900">#{ticket.id}</span>
-                              <span className={`text-xs px-2 py-0.5 rounded-full ${getStatusColor(ticket.status)}`}>
-                                {getStatusLabel(ticket.status)}
-                              </span>
-                              <span className={`text-xs px-2 py-0.5 rounded-full ${getPriorityColor(ticket.priority)}`}>
-                                {ticket.priority}
-                              </span>
-                              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${matchLevel?.color || 'bg-gray-100'}`}>
-                                {matchLevel?.emoji} {ticket.similarity_score}% match
-                              </span>
-                              {ticket.is_recurring && (
-                                <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-800 rounded-full">
-                                  🔄 Recurring
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-sm text-gray-700 mt-1">{ticket.title}</p>
-                            <div className="flex gap-2 mt-1 text-xs text-gray-400 flex-wrap">
-                              <span>📅 {formatDate(ticket.created_at)}</span>
-                              {ticket.rca_status && ticket.rca_status !== 'pending' && (
-                                <span className="text-green-600">✅ RCA: {ticket.rca_status}</span>
-                              )}
-                              {ticket.solution_status && ticket.solution_status !== 'pending' && (
-                                <span className="text-blue-600">✅ Solution: {ticket.solution_status}</span>
-                              )}
-                            </div>
-                            {ticket.rca_notes && (
-                              <div className="mt-1 text-xs text-gray-500 truncate">
-                                💡 RCA: {ticket.rca_notes.substring(0, 150)}...
-                              </div>
-                            )}
-                          </div>
-                          <Link
-                            to={`/items/${ticket.id}`}
-                            className="text-xs text-blue-600 hover:text-blue-800 ml-4 whitespace-nowrap"
-                            target="_blank"
-                          >
-                            View →
-                          </Link>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-
-            <div className="p-4 border-t border-gray-200 flex justify-end">
-              <button
-                onClick={() => setShowSimilarityModal(false)}
-                className="btn btn-secondary text-sm"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Ticket Details Modal */}
       {detailModal.open && (
@@ -1016,49 +814,27 @@ export default function Dashboard() {
                       <th>Pending By</th>
                       <th>Target Date</th>
                       <th>Status</th>
-                      <th>Similarity</th>
                       <th>Remarks</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredModalItems.map((item, index) => {
-                      const highestScore = getHighestSimilarity(item.id)
-                      const matchLevel = getMatchLevel(highestScore)
-                      const similarCount = getSimilarityForTicket(item.id).length
-                      
-                      return (
-                        <tr key={item.id}>
-                          <td>{index + 1}</td>
-                          <td>{getBranchName(item.branch_id)}</td>
-                          <td className="max-w-[200px] truncate" title={item.title}>{item.title}</td>
-                          <td>#{item.id}</td>
-                          <td>{formatDate(item.created_at)}</td>
-                          <td>{getReporterName(item.reporter_id)}</td>
-                          <td>{getAssigneeName(item.assignee_id)}</td>
-                          <td>{getPendingBy(item.status)}</td>
-                          <td>{formatDate(item.end_date || item.due_at)}</td>
-                          <td>{getStatusLabel(item.status)}</td>
-                          <td>
-                            {highestScore && similarCount > 0 ? (
-                              <button
-                                onClick={() => {
-                                  const ticket = allItems.find(t => t.id === item.id)
-                                  if (ticket) openSimilarityModal(ticket)
-                                }}
-                                className={`text-xs px-2 py-0.5 rounded-full ${matchLevel?.color || 'bg-gray-100 text-gray-600'}`}
-                              >
-                                {matchLevel?.emoji} {highestScore}% ({similarCount})
-                              </button>
-                            ) : (
-                              <span className="text-xs text-gray-400">-</span>
-                            )}
-                          </td>
-                          <td className="max-w-[320px] truncate" title={item.description || ''}>
-                            {item.description || '-'}
-                          </td>
-                        </tr>
-                      )
-                    })}
+                    {filteredModalItems.map((item, index) => (
+                      <tr key={item.id}>
+                        <td>{index + 1}</td>
+                        <td>{getBranchName(item.branch_id)}</td>
+                        <td className="max-w-[280px] truncate" title={item.title}>{item.title}</td>
+                        <td>#{item.id}</td>
+                        <td>{formatDate(item.created_at)}</td>
+                        <td>{getReporterName(item.reporter_id)}</td>
+                        <td>{getAssigneeName(item.assignee_id)}</td>
+                        <td>{getPendingBy(item.status)}</td>
+                        <td>{formatDate(item.end_date || item.due_at)}</td>
+                        <td>{getStatusLabel(item.status)}</td>
+                        <td className="max-w-[320px] truncate" title={item.description || ''}>
+                          {item.description || '-'}
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>

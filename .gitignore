@@ -1,3 +1,22 @@
-node_modules
-backend/venv
+node_modules/
 .env
+
+# Python virtual environments
+backend/venv/
+backend/.venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Test / tooling cache
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# IDE
+.vscode/
+.idea/

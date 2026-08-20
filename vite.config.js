@@ -8,7 +8,8 @@ export default defineConfig({
     port: 3000,
     proxy: {
       '/api': {
-        target: 'http://ticket.dialdesk.in:8030',
+        target: 'http://127.0.0.1:8000',
+        // target: 'http://ticket.dialdesk.in:8030',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, '')
       }

@@ -15,7 +15,8 @@ import {
   ArrowRightOnRectangleIcon,
   TicketIcon,
   DocumentChartBarIcon,
-  CalendarDaysIcon
+  CalendarDaysIcon,
+  BuildingOfficeIcon
 } from '@heroicons/react/24/outline'
 
 const navigation = [
@@ -25,6 +26,7 @@ const navigation = [
   { name: 'Activity Log', href: '/activity-log', icon: CalendarDaysIcon, color: 'from-amber-500 to-orange-500' },
   { name: 'Reports', href: '/reports', icon: ChartBarIcon, color: 'from-cyan-500 to-blue-500' },
   { name: 'Time Reports', href: '/time-reports', icon: ClockIcon, color: 'from-rose-500 to-pink-500' },
+  { name: 'Client Analysis', href: '/client-analysis', icon: BuildingOfficeIcon, color: 'from-indigo-500 to-purple-600' },
   { name: 'Settings', href: '/settings', icon: CogIcon, color: 'from-slate-500 to-gray-500' },
 ]
 
@@ -42,15 +44,35 @@ export default function Layout({ children }) {
     }
   }
 
+  // Check if user's branch is Dialdesk, Ispark, or HQ
+  const isAllowedBranch = () => {
+    if (!user) return false
+    const allowedBranches = ['dialdesk', 'ispark', 'hq', 'Dialdesk', 'Ispark', 'HQ', 'DIALDESK', 'ISPARK']
+    const branchName = user.branch?.name || ''
+    return allowedBranches.includes(branchName) || allowedBranches.includes(branchName.toLowerCase())
+  }
+
+  // Check if user can access Client Analysis
+  const canAccessClientAnalysis = user?.role !== 'requester' && isAllowedBranch()
+
+  // Filter navigation based on user role and branch
   const filteredNavigation = navigation.filter((item) => {
+    // Requester ko specific pages nahi dikhenge
     if (user?.role === "requester") {
       return ![
         "Time Reports",
-        
         "Activity Log",
-        "Reports"
+        "Reports",
+        "Client Analysis"
       ].includes(item.name)
     }
+    
+    // Client Analysis sirf allowed branches (Dialdesk, Ispark, HQ) ke users ko dikhega
+    if (item.name === "Client Analysis" && !canAccessClientAnalysis) {
+      return false
+    }
+    
+    // Baaki sab users (Admin, PM, Dev) ko sab dikhega
     return true
   })
 
@@ -118,6 +140,11 @@ export default function Layout({ children }) {
                     <span className={`text-xs px-2 py-0.5 rounded-full border ${getRoleBadgeColor(user?.role)} capitalize`}>
                       {user?.role}
                     </span>
+                    {user?.branch?.name && (
+                      <span className="text-xs text-slate-400 truncate">
+                        {user.branch.name}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -184,9 +211,16 @@ export default function Layout({ children }) {
               {!sidebarCollapsed && (
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-medium text-white truncate">{user?.name}</p>
-                  <span className={`text-xs px-1.5 py-0.5 rounded border ${getRoleBadgeColor(user?.role)} capitalize`}>
-                    {user?.role}
-                  </span>
+                  <div className="flex items-center gap-1">
+                    <span className={`text-xs px-1.5 py-0.5 rounded border ${getRoleBadgeColor(user?.role)} capitalize`}>
+                      {user?.role}
+                    </span>
+                    {user?.branch?.name && (
+                      <span className="text-xs text-slate-400 truncate">
+                        {user.branch.name}
+                      </span>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
