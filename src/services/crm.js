@@ -39,5 +39,9 @@ export const fetchCRMClients = async () => {
     throw new Error('Failed to fetch clients')
   }
 
-  return await clientsResponse.json()
+  const data = await clientsResponse.json()
+
+  return (data || []).sort((a, b) =>
+    String(a.company_name).localeCompare(String(b.company_name))
+  )
 }
