@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../services/api'
+import { fetchCRMClients } from '../services/crm'
 import { useAuth } from '../contexts/AuthContext'
 import toast from 'react-hot-toast'
 import {
@@ -61,14 +62,14 @@ export default function ClientAnalysis() {
   const fetchClients = async () => {
     try {
       setLoading(true)
-      const response = await api.get('/clients/clients')
-      console.log('✅ Clients fetched:', response.data)
-      
-      if (response.data && response.data.length > 0) {
-        setClients(response.data)
-        setSelectedClient(response.data[0])
+      const data = await fetchCRMClients()
+      console.log('✅ CRM Clients:', data)
+
+      if (data && data.length > 0) {
+        setClients(data)
+        setSelectedClient(data[0])
       } else {
-        toast.error('No clients found. Please add clients first.')
+        toast.error('No clients found.')
         setClients([])
       }
     } catch (error) {
@@ -86,7 +87,7 @@ export default function ClientAnalysis() {
     try {
       setLoading(true)
       const params = new URLSearchParams()
-      params.append('client_id', selectedClient.id)
+      params.append('client_id', selectedClient.company_id)
       params.append('limit', '10000')
 
       if (timeRange === '7days') {
@@ -401,9 +402,9 @@ export default function ClientAnalysis() {
             Select Client:
           </label>
           <select
-            value={selectedClient?.id || ''}
+            value={selectedClient?.company_id || ''}
             onChange={(e) => {
-              const client = clients.find(c => c.id === parseInt(e.target.value))
+              const client = clients.find(c => String(c.company_id) === e.target.value)
               setSelectedClient(client)
             }}
             className="input flex-1 min-w-[200px] max-w-md"
@@ -412,8 +413,8 @@ export default function ClientAnalysis() {
               <option value="">No clients available</option>
             ) : (
               clients.map((client) => (
-                <option key={client.id} value={client.id}>
-                  {client.name}
+                <option key={client.company_id} value={client.company_id}>
+                  {client.company_name}
                 </option>
               ))
             )}

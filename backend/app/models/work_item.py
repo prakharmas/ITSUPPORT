@@ -9,7 +9,8 @@ class WorkItem(Base):
     id = Column(Integer, primary_key=True, index=True)
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=True)
-    client_id = Column(Integer, ForeignKey("clients.id"), nullable=True)  # NEW
+    client_id = Column(String(100), nullable=True)
+    client_name = Column(String(200), nullable=True)
     title = Column(String(200), nullable=False)
     description = Column(Text)
     type = Column(Enum('support', 'feature', name='item_type'), nullable=False)
@@ -54,7 +55,6 @@ class WorkItem(Base):
     # Relationships
     project = relationship("Project", back_populates="work_items")
     branch = relationship("Branch", back_populates="work_items")
-    client = relationship("Client", back_populates="work_items")  # NEW
     reporter = relationship("User", foreign_keys=[reporter_id], back_populates="reported_items")
     assignee = relationship("User", foreign_keys=[assignee_id], back_populates="assigned_items")
     comments = relationship("ItemComment", back_populates="work_item", cascade="all, delete-orphan")

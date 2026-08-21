@@ -46,7 +46,8 @@ def create_item(
         priority=item.priority,
         project_id=item.project_id,
         branch_id=branch_id,
-        client_id=item.client_id if hasattr(item, 'client_id') else None,  # NEW
+        client_id=item.client_id,
+        client_name=item.client_name,
         assignee_id=item.assignee_id,
         reporter_id=current_user.id,
         start_date=item.start_date,
@@ -83,7 +84,7 @@ def read_items(
     status: Optional[str] = Query(None),
     assignee_id: Optional[str] = Query(None),
     branch_id: Optional[int] = Query(None),
-    client_id: Optional[int] = Query(None),  # NEW
+    client_id: Optional[str] = Query(None),
     from_date: Optional[date] = Query(None),
     to_date: Optional[date] = Query(None),
     search: Optional[str] = Query(None),

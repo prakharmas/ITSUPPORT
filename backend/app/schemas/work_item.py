@@ -42,7 +42,8 @@ class WorkItemBase(BaseModel):
     priority: ItemPriority = ItemPriority.NORMAL
     project_id: Optional[int] = None
     branch_id: Optional[int] = None
-    client_id: Optional[int] = None  # NEW
+    client_id: Optional[str] = None
+    client_name: Optional[str] = None
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
     due_at: Optional[datetime] = None
@@ -65,7 +66,8 @@ class WorkItemUpdate(BaseModel):
     priority: Optional[ItemPriority] = None
     project_id: Optional[int] = None
     branch_id: Optional[int] = None
-    client_id: Optional[int] = None  # NEW
+    client_id: Optional[str] = None
+    client_name: Optional[str] = None
     assignee_id: Optional[int] = None
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None

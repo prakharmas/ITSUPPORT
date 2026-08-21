@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { api } from '../services/api'
+import { fetchCRMClients } from '../services/crm'
 import { useAuth } from '../contexts/AuthContext'
 import toast from 'react-hot-toast'
-import { ExclamationTriangleIcon, XMarkIcon, PlusIcon } from '@heroicons/react/24/outline'
+import { ExclamationTriangleIcon, XMarkIcon } from '@heroicons/react/24/outline'
 
 export default function CreateItem() {
   const { user } = useAuth()
@@ -13,9 +14,6 @@ export default function CreateItem() {
   const [clients, setClients] = useState([])
   const [loading, setLoading] = useState(false)
   const [selectedFiles, setSelectedFiles] = useState([])
-  const [showAddClientModal, setShowAddClientModal] = useState(false)
-  const [newClientName, setNewClientName] = useState('')
-  const [addingClient, setAddingClient] = useState(false)
   const [loadingClients, setLoadingClients] = useState(false)
   
   const [similarTickets, setSimilarTickets] = useState([])
@@ -31,8 +29,7 @@ export default function CreateItem() {
     register,
     handleSubmit,
     formState: { errors },
-    watch,
-    setValue
+    watch
   } = useForm()
 
   const title = watch('title')
@@ -44,13 +41,6 @@ export default function CreateItem() {
     const allowedBranches = ['dialdesk', 'ispark', 'hq', 'Dialdesk', 'Ispark', 'HQ', 'DIALDESK', 'ISPARK']
     const branchName = user.branch?.name || ''
     return allowedBranches.includes(branchName) || allowedBranches.includes(branchName.toLowerCase())
-  }
-
-  // Check if user can manage clients (Admin/PM with allowed branch)
-  const canManageClients = () => {
-    if (!user) return false
-    if (user.role !== 'admin' && user.role !== 'pm') return false
-    return isAllowedBranch()
   }
 
   // Check if user can see client dropdown
@@ -98,111 +88,18 @@ export default function CreateItem() {
     }
   }
 
-  // const fetchClients = async () => {
-  //   try {
-  //     setLoadingClients(true)
-  //     const response = await api.get('/clients/clients')
-  //     console.log('✅ Clients fetched:', response.data)
-  //     setClients(response.data || [])
-  //   } catch (error) {
-  //     console.error('❌ Failed to fetch clients:', error)
-  //     setClients([])
-  //   } finally {
-  //     setLoadingClients(false)
-  //   }
-  // }
-
-
-  const CRM_API = 'https://crmapi.dialdesk.in'
-
   const fetchClients = async () => {
     try {
       setLoadingClients(true)
-
-      // 1. Login
-      const loginResponse = await fetch(`${CRM_API}/auth/login`, {
-        method: 'POST',
-        headers: {
-          'accept': 'application/json',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          email: 'krishna.kumar@teammas.in',
-          password: '5678'
-        })
-      })
-
-      if (!loginResponse.ok) {
-        throw new Error('CRM login failed')
-      }
-
-      const loginData = await loginResponse.json()
-
-      const token = loginData.access_token
-
-      if (!token) {
-        throw new Error('Access token not received')
-      }
-
-      // 2. Get clients using token
-      const clientsResponse = await fetch(
-        `${CRM_API}/agents/clients-rights`,
-        {
-          method: 'GET',
-          headers: {
-            'accept': 'application/json',
-            'Authorization': `Bearer ${token}`
-          }
-          
-        }
-      )
-
-      if (!clientsResponse.ok) {
-        throw new Error('Failed to fetch clients')
-      }
-
-      const clientsData = await clientsResponse.json()
-
-      console.log('✅ CRM Clients:', clientsData)
-
-      setClients(clientsData || [])
-
+      const data = await fetchCRMClients()
+      console.log('✅ CRM Clients:', data)
+      setClients(data || [])
     } catch (error) {
       console.error('❌ Failed to fetch CRM clients:', error)
       setClients([])
       toast.error('Failed to load clients')
     } finally {
       setLoadingClients(false)
-    }
-  }
-
-  const handleAddClient = async () => {
-    if (!newClientName.trim()) {
-      toast.error('Please enter client name')
-      return
-    }
-
-    if (!canManageClients()) {
-      toast.error('Only Admin/PM with Dialdesk, Ispark, or HQ branch can add clients')
-      return
-    }
-
-    setAddingClient(true)
-    try {
-      const response = await api.post('/clients/clients', { 
-        name: newClientName.trim()
-      })
-      
-      setClients([...clients, response.data])
-      setNewClientName('')
-      setShowAddClientModal(false)
-      toast.success(`✅ Client "${newClientName.trim()}" added successfully!`)
-      setValue('client_id', response.data.id)
-    } catch (error) {
-      console.error('Failed to add client:', error)
-      toast.error(error.response?.data?.detail || 'Failed to add client')
-    } finally {
-      setAddingClient(false)
     }
   }
 
@@ -250,6 +147,7 @@ export default function CreateItem() {
   const onSubmit = async (data) => {
     setLoading(true)
     try {
+      const selectedClient = clients.find(c => String(c.company_id) === String(data.client_id))
       const itemData = {
         title: data.title,
         description: data.description,
@@ -257,7 +155,8 @@ export default function CreateItem() {
         priority: data.priority,
         assignee_id: data.assignee_id ? parseInt(data.assignee_id) : null,
         branch_id: user?.branch_id || null,
-        client_id: data.client_id ? parseInt(data.client_id) : null,
+        client_id: data.client_id || null,
+        client_name: selectedClient ? selectedClient.company_name : null,
       }
 
       console.log('Creating ticket with data:', itemData)
@@ -440,21 +339,9 @@ export default function CreateItem() {
             {/* Client Selection - ONLY for users with Dialdesk, Ispark, or HQ branch */}
             {canSeeClientDropdown() && (
               <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label htmlFor="client_id" className="block text-sm font-medium text-gray-700">
-                    🏢 Select Client <span className="text-gray-400 text-xs">(Optional)</span>
-                  </label>
-                  {canManageClients() && (
-                    <button
-                      type="button"
-                      onClick={() => setShowAddClientModal(true)}
-                      className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1 px-2 py-1 bg-blue-50 rounded-lg border border-blue-200 hover:bg-blue-100 transition-colors"
-                    >
-                      <PlusIcon className="h-3 w-3" />
-                      Add Client
-                    </button>
-                  )}
-                </div>
+                <label htmlFor="client_id" className="block text-sm font-medium text-gray-700 mb-1">
+                  🏢 Select Client <span className="text-gray-400 text-xs">(Optional)</span>
+                </label>
                 
                 {loadingClients ? (
                   <div className="flex items-center gap-2 text-sm text-gray-500 p-2">
@@ -693,86 +580,6 @@ export default function CreateItem() {
           </button>
         </div>
       </form>
-
-      {/* Add Client Modal */}
-      {showAddClientModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                <span className="text-2xl">🏢</span>
-                Add New Client
-              </h2>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowAddClientModal(false)
-                  setNewClientName('')
-                }}
-                className="text-gray-400 hover:text-gray-600"
-                disabled={addingClient}
-              >
-                ✖️
-              </button>
-            </div>
-            
-            <p className="text-sm text-gray-600 mb-4">
-              Add a new client. This will be available in the client dropdown for all users.
-            </p>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Client Name *
-                </label>
-                <input
-                  type="text"
-                  value={newClientName}
-                  onChange={(e) => setNewClientName(e.target.value)}
-                  placeholder="Enter client name..."
-                  className="input"
-                  autoFocus
-                  disabled={addingClient}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      handleAddClient()
-                    }
-                  }}
-                />
-              </div>
-            </div>
-
-            <div className="flex gap-3 justify-end mt-6">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowAddClientModal(false)
-                  setNewClientName('')
-                }}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-                disabled={addingClient}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleAddClient}
-                className="px-6 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
-                disabled={addingClient || !newClientName.trim()}
-              >
-                {addingClient ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                    Adding...
-                  </>
-                ) : (
-                  '✅ Add Client'
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Similar Ticket Detail Modal */}
       {showSimilarDetailModal && selectedSimilarTicket && (
