@@ -98,15 +98,79 @@ export default function CreateItem() {
     }
   }
 
+  // const fetchClients = async () => {
+  //   try {
+  //     setLoadingClients(true)
+  //     const response = await api.get('/clients/clients')
+  //     console.log('✅ Clients fetched:', response.data)
+  //     setClients(response.data || [])
+  //   } catch (error) {
+  //     console.error('❌ Failed to fetch clients:', error)
+  //     setClients([])
+  //   } finally {
+  //     setLoadingClients(false)
+  //   }
+  // }
+
+
+  const CRM_API = 'https://crmapi.dialdesk.in'
+
   const fetchClients = async () => {
     try {
       setLoadingClients(true)
-      const response = await api.get('/clients/clients')
-      console.log('✅ Clients fetched:', response.data)
-      setClients(response.data || [])
+
+      // 1. Login
+      const loginResponse = await fetch(`${CRM_API}/auth/login`, {
+        method: 'POST',
+        headers: {
+          'accept': 'application/json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          email: 'krishna.kumar@teammas.in',
+          password: '5678'
+        })
+      })
+
+      if (!loginResponse.ok) {
+        throw new Error('CRM login failed')
+      }
+
+      const loginData = await loginResponse.json()
+
+      const token = loginData.access_token
+
+      if (!token) {
+        throw new Error('Access token not received')
+      }
+
+      // 2. Get clients using token
+      const clientsResponse = await fetch(
+        `${CRM_API}/agents/clients-rights`,
+        {
+          method: 'GET',
+          headers: {
+            'accept': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+          
+        }
+      )
+
+      if (!clientsResponse.ok) {
+        throw new Error('Failed to fetch clients')
+      }
+
+      const clientsData = await clientsResponse.json()
+
+      console.log('✅ CRM Clients:', clientsData)
+
+      setClients(clientsData || [])
+
     } catch (error) {
-      console.error('❌ Failed to fetch clients:', error)
+      console.error('❌ Failed to fetch CRM clients:', error)
       setClients([])
+      toast.error('Failed to load clients')
     } finally {
       setLoadingClients(false)
     }
@@ -404,9 +468,13 @@ export default function CreateItem() {
                     className="input"
                   >
                     <option value="">Select client (optional)...</option>
+
                     {clients.map((client) => (
-                      <option key={client.id} value={client.id}>
-                        {client.name}
+                      <option
+                        key={client.company_id}
+                        value={client.company_id}
+                      >
+                        {client.company_name}
                       </option>
                     ))}
                   </select>
