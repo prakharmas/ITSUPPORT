@@ -1,4 +1,7 @@
-const CRM_API = 'https://crmapi.dialdesk.in'
+const CRM_API = import.meta.env.VITE_CRM_API_URL
+const CRM_EMAIL = import.meta.env.VITE_CRM_EMAIL
+const CRM_PASSWORD = import.meta.env.VITE_CRM_PASSWORD
+
 
 export const fetchCRMClients = async () => {
   const loginResponse = await fetch(`${CRM_API}/auth/login`, {
@@ -8,8 +11,8 @@ export const fetchCRMClients = async () => {
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
-      email: 'krishna.kumar@teammas.in',
-      password: '5678'
+      email: CRM_EMAIL,
+      password: CRM_PASSWORD
     })
   })
 
