@@ -50,7 +50,7 @@ export default function Dashboard() {
     items: []
   })
   const [searchTerm, setSearchTerm] = useState('')
-  const [similarityData, setSimilarityData] = useState({}) // Store similarity for each ticket
+  const [similarityData, setSimilarityData] = useState({})
   const [showSimilarityModal, setShowSimilarityModal] = useState(false)
   const [selectedSimilarityTicket, setSelectedSimilarityTicket] = useState(null)
   const [similarityTickets, setSimilarityTickets] = useState([])
@@ -110,7 +110,6 @@ export default function Dashboard() {
       )
       setAllItems(items)
       
-      // Fetch similarity for each ticket
       await fetchSimilarityForTickets(items)
       
       const now = new Date()
@@ -191,12 +190,10 @@ export default function Dashboard() {
     }
   }
 
-  // Fetch similarity for tickets
   const fetchSimilarityForTickets = async (items) => {
     try {
       const similarityMap = {}
       
-      // For each ticket, find similar tickets
       for (const item of items) {
         if (item.status === 'done' || item.status === 'rejected') continue
         
@@ -210,7 +207,6 @@ export default function Dashboard() {
           
           const response = await api.get(`/items/similar/find?${params.toString()}`)
           
-          // Filter out the current ticket itself
           const similar = response.data.filter(t => t.id !== item.id)
           
           if (similar.length > 0) {
@@ -227,19 +223,16 @@ export default function Dashboard() {
     }
   }
 
-  // Get similarity for a ticket
   const getSimilarityForTicket = (ticketId) => {
     return similarityData[ticketId] || []
   }
 
-  // Get highest similarity score for a ticket
   const getHighestSimilarity = (ticketId) => {
     const similar = getSimilarityForTicket(ticketId)
     if (similar.length === 0) return null
     return Math.max(...similar.map(t => t.similarity_score || 0))
   }
 
-  // Get match level
   const getMatchLevel = (score) => {
     if (!score) return null
     if (score >= 70) return { emoji: '🔴', label: 'High', color: 'text-red-600 bg-red-100' }
@@ -773,7 +766,7 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* Recent Items with Similarity */}
+      {/* Recent Items with Similarity - NOT CLICKABLE */}
       <div className="card">
         <div className="section-header">
           <div className="flex items-center gap-2">
@@ -832,19 +825,18 @@ export default function Dashboard() {
                   </Link>
                   
                   <div className="flex items-center gap-3 flex-shrink-0">
-                    {/* Similarity Badge */}
+                    {/* Similarity Badge - NOT CLICKABLE (span instead of button) */}
                     {highestScore && similarCount > 0 && (
-                      <button
-                        onClick={() => openSimilarityModal(item)}
-                        className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium ${matchLevel?.color || 'bg-gray-100 text-gray-600'} hover:opacity-80 transition-opacity border border-transparent hover:border-gray-300`}
-                        title={`${similarCount} similar ticket${similarCount > 1 ? 's' : ''} found. Click to view.`}
+                      <span
+                        className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium ${matchLevel?.color || 'bg-gray-100 text-gray-600'} cursor-default`}
+                        title={`${similarCount} similar ticket${similarCount > 1 ? 's' : ''} found`}
                       >
                         <MagnifyingGlassIcon className="h-3 w-3" />
                         {matchLevel?.emoji} {highestScore}%
                         <span className="text-xs text-gray-400 ml-0.5">
                           ({similarCount})
                         </span>
-                      </button>
+                      </span>
                     )}
                     
                     <span className="text-xs text-slate-400 hidden sm:block">
@@ -858,7 +850,7 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* Similarity Modal */}
+      {/* Similarity Modal - Remains Clickable */}
       {showSimilarityModal && selectedSimilarityTicket && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[85vh] flex flex-col">
@@ -1045,7 +1037,7 @@ export default function Dashboard() {
                                   const ticket = allItems.find(t => t.id === item.id)
                                   if (ticket) openSimilarityModal(ticket)
                                 }}
-                                className={`text-xs px-2 py-0.5 rounded-full ${matchLevel?.color || 'bg-gray-100 text-gray-600'}`}
+                                className={`text-xs px-2 py-0.5 rounded-full ${matchLevel?.color || 'bg-gray-100 text-gray-600'} hover:opacity-80 transition-opacity`}
                               >
                                 {matchLevel?.emoji} {highestScore}% ({similarCount})
                               </button>
