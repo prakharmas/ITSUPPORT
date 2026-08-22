@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
@@ -54,6 +54,7 @@ export default function Dashboard() {
   const [showSimilarityModal, setShowSimilarityModal] = useState(false)
   const [selectedSimilarityTicket, setSelectedSimilarityTicket] = useState(null)
   const [similarityTickets, setSimilarityTickets] = useState([])
+  const fetchIdRef = useRef(0)
 
   useEffect(() => {
     fetchDashboardData()
@@ -83,6 +84,7 @@ export default function Dashboard() {
   }
 
   const fetchDashboardData = async () => {
+    const fetchId = ++fetchIdRef.current
     try {
       const params = new URLSearchParams()
       params.append('limit', '10000')
@@ -104,14 +106,12 @@ export default function Dashboard() {
       }
 
       const itemsResponse = await api.get(`/items?${params.toString()}`)
-      
+
       const items = [...itemsResponse.data].sort(
         (a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)
       )
       setAllItems(items)
-      
-      await fetchSimilarityForTickets(items)
-      
+
       const now = new Date()
       const threeDaysAgo = new Date(now.getTime() - (3 * 24 * 60 * 60 * 1000))
       
@@ -183,6 +183,9 @@ export default function Dashboard() {
         displayItems = myItems.slice(0, 10)
       }
       setRecentItems(displayItems)
+
+      // Load similarity data in the background so the dashboard renders immediately
+      fetchSimilarityForTickets(items, fetchId)
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error)
     } finally {
@@ -190,34 +193,47 @@ export default function Dashboard() {
     }
   }
 
-  const fetchSimilarityForTickets = async (items) => {
+  const fetchSimilarityForTickets = async (items, fetchId) => {
     try {
       const similarityMap = {}
-      
-      for (const item of items) {
-        if (item.status === 'done' || item.status === 'rejected') continue
-        
-        try {
-          const params = new URLSearchParams()
-          params.append('title', item.title)
-          if (item.description) {
-            params.append('description', item.description.substring(0, 100))
+      const queue = items.filter(
+        (item) => item.status !== 'done' && item.status !== 'rejected'
+      )
+
+      const CONCURRENCY = 8
+
+      const worker = async () => {
+        while (queue.length > 0) {
+          const item = queue.shift()
+          try {
+            const params = new URLSearchParams()
+            params.append('title', item.title)
+            if (item.description) {
+              params.append('description', item.description.substring(0, 100))
+            }
+            params.append('limit', '3')
+
+            const response = await api.get(`/items/similar/find?${params.toString()}`)
+
+            const similar = response.data.filter(t => t.id !== item.id)
+
+            if (similar.length > 0) {
+              similarityMap[item.id] = similar
+            }
+          } catch (error) {
+            console.error(`Failed to fetch similarity for ticket ${item.id}:`, error)
           }
-          params.append('limit', '3')
-          
-          const response = await api.get(`/items/similar/find?${params.toString()}`)
-          
-          const similar = response.data.filter(t => t.id !== item.id)
-          
-          if (similar.length > 0) {
-            similarityMap[item.id] = similar
-          }
-        } catch (error) {
-          console.error(`Failed to fetch similarity for ticket ${item.id}:`, error)
         }
       }
-      
-      setSimilarityData(similarityMap)
+
+      await Promise.all(
+        Array.from({ length: Math.min(CONCURRENCY, queue.length) }, () => worker())
+      )
+
+      // Ignore stale results if filters changed and a newer fetch started
+      if (fetchId === fetchIdRef.current) {
+        setSimilarityData(similarityMap)
+      }
     } catch (error) {
       console.error('Failed to fetch similarity data:', error)
     }
