@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../services/api'
-import { fetchCRMClients } from '../services/crm'
 import { useAuth } from '../contexts/AuthContext'
 import toast from 'react-hot-toast'
 import {
@@ -62,8 +61,10 @@ export default function ClientAnalysis() {
   const fetchClients = async () => {
     try {
       setLoading(true)
-      const data = await fetchCRMClients()
-      console.log('✅ CRM Clients:', data)
+      const response = await api.get('/crm/clients')
+      const data = (response.data || []).sort((a, b) =>
+        String(a.company_name).localeCompare(String(b.company_name))
+      )
 
       if (data && data.length > 0) {
         setClients(data)
