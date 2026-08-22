@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { api } from '../services/api'
-import { fetchCRMClients } from '../services/crm'
 import { useAuth } from '../contexts/AuthContext'
 import toast from 'react-hot-toast'
 import { ExclamationTriangleIcon, XMarkIcon } from '@heroicons/react/24/outline'
@@ -91,11 +90,10 @@ export default function CreateItem() {
   const fetchClients = async () => {
     try {
       setLoadingClients(true)
-      const data = await fetchCRMClients()
-      console.log('✅ CRM Clients:', data)
-      setClients(data || [])
+      const response = await api.get('/crm/clients')
+      setClients(response.data || [])
     } catch (error) {
-      console.error('❌ Failed to fetch CRM clients:', error)
+      console.error('❌ Failed to fetch clients:', error)
       setClients([])
       toast.error('Failed to load clients')
     } finally {

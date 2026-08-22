@@ -5,7 +5,7 @@ import uvicorn
 from dotenv import load_dotenv
 
 from app.database import init_db
-from app.routers import auth, users, items, oncall, reports, branches, activity_reports, notifications, attachments, time_tracking
+from app.routers import auth, users, items, oncall, reports, branches, activity_reports, notifications, attachments, time_tracking, crm
 from app.scheduler import start_scheduler
 
 load_dotenv()
@@ -47,6 +47,7 @@ app.include_router(activity_reports.router, prefix="/activity-reports", tags=["a
 app.include_router(notifications.router, prefix="/notifications", tags=["notifications"])
 app.include_router(attachments.router, prefix="/attachments", tags=["attachments"])
 app.include_router(time_tracking.router, prefix="/time-tracking", tags=["time-tracking"])
+app.include_router(crm.router, prefix="/crm", tags=["crm"])
 
 @app.get("/")
 async def root():
