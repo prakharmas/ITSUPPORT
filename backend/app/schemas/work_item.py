@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, date
 from typing import Optional, List
 from enum import Enum
 from decimal import Decimal
@@ -44,6 +44,7 @@ class WorkItemBase(BaseModel):
     branch_id: Optional[int] = None
     client_id: Optional[str] = None
     client_name: Optional[str] = None
+    client_expected_date: Optional[date] = None
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
     due_at: Optional[datetime] = None
@@ -68,6 +69,7 @@ class WorkItemUpdate(BaseModel):
     branch_id: Optional[int] = None
     client_id: Optional[str] = None
     client_name: Optional[str] = None
+    client_expected_date: Optional[date] = None
     assignee_id: Optional[int] = None
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
@@ -88,6 +90,8 @@ class WorkItem(WorkItemBase):
     completed_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
+    # ✅ NEW: Total logged hours from time_entries
+    total_logged_hours: Optional[float] = 0
     
     class Config:
         from_attributes = True

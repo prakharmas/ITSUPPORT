@@ -8,6 +8,7 @@ from app.database import get_db
 from app.models.user import User
 from app.models.work_item import WorkItem
 from app.models.item_comment import ItemComment
+from app.models.time_entry import TimeEntry
 from app.schemas.work_item import WorkItem as WorkItemSchema, WorkItemCreate, WorkItemUpdate, WorkItemWithComments, WorkItemAssign
 from app.schemas.work_item import CommentCreate, Comment
 from app.auth import get_current_active_user
@@ -20,6 +21,31 @@ from app.services.notification_service import (
 
 router = APIRouter()
 
+
+# Helper to attach total logged hours to a single item
+def _attach_logged_hours(db: Session, item: WorkItem):
+    if item is None:
+        return
+    total = db.query(func.sum(TimeEntry.hours)).filter(
+        TimeEntry.work_item_id == item.id
+    ).scalar()
+    item.total_logged_hours = float(total or 0)
+
+
+# Helper to attach total logged hours to multiple items (batch)
+def _attach_logged_hours_batch(db: Session, items: List[WorkItem]):
+    if not items:
+        return
+    item_ids = [it.id for it in items]
+    sums = db.query(
+        TimeEntry.work_item_id,
+        func.sum(TimeEntry.hours).label('total')
+    ).filter(TimeEntry.work_item_id.in_(item_ids)).group_by(TimeEntry.work_item_id).all()
+    time_map = {row.work_item_id: float(row.total or 0) for row in sums}
+    for it in items:
+        it.total_logged_hours = time_map.get(it.id, 0)
+
+
 # ============================================================
 # CREATE ITEM
 # ============================================================
@@ -30,12 +56,10 @@ def create_item(
     db: Session = Depends(get_db), 
     current_user: User = Depends(get_current_active_user)
 ):
-    # Set branch_id from current user's branch if not provided
     branch_id = item.branch_id
     if branch_id is None:
         branch_id = current_user.branch_id
     
-    # Requester can only create items for their own branch
     if current_user.role == "requester" and branch_id != current_user.branch_id:
         raise HTTPException(status_code=403, detail="Requesters can only create items for their own branch")
     
@@ -48,6 +72,7 @@ def create_item(
         branch_id=branch_id,
         client_id=item.client_id,
         client_name=item.client_name,
+        client_expected_date=item.client_expected_date,
         assignee_id=item.assignee_id,
         reporter_id=current_user.id,
         start_date=item.start_date,
@@ -65,7 +90,8 @@ def create_item(
     db.commit()
     db.refresh(db_item)
     
-    # Send notification if assigned
+    _attach_logged_hours(db, db_item)
+    
     if item.assignee_id:
         notify_ticket_assigned(db, db_item.id, item.assignee_id, db_item.reporter_id, current_user.id)
     
@@ -85,6 +111,7 @@ def read_items(
     assignee_id: Optional[str] = Query(None),
     branch_id: Optional[int] = Query(None),
     client_id: Optional[str] = Query(None),
+    is_recurring: Optional[bool] = Query(None),
     from_date: Optional[date] = Query(None),
     to_date: Optional[date] = Query(None),
     search: Optional[str] = Query(None),
@@ -94,20 +121,20 @@ def read_items(
 ):
     query = db.query(WorkItem)
     
-    # Branch filtering based on user role
     if current_user.role == "requester":
         query = query.filter(WorkItem.branch_id == current_user.branch_id)
     elif current_user.role == "dev":
         if assignee_id != "me" and current_user.branch_id is not None:
             query = query.filter(WorkItem.branch_id == current_user.branch_id)
     
-    # Apply branch filter if provided
     if branch_id is not None:
         query = query.filter(WorkItem.branch_id == branch_id)
     
-    # Apply client filter if provided - NEW
     if client_id is not None:
         query = query.filter(WorkItem.client_id == client_id)
+    
+    if is_recurring is not None:
+        query = query.filter(WorkItem.is_recurring == is_recurring)
     
     if type:
         query = query.filter(WorkItem.type == type)
@@ -125,7 +152,6 @@ def read_items(
             except ValueError:
                 pass
 
-    # SEARCH FUNCTIONALITY
     if search:
         search_term = f"%{search}%"
         query = query.filter(
@@ -144,26 +170,23 @@ def read_items(
             )
         )
 
-    # DATE FILTERS
     if from_date:
         query = query.filter(
-            WorkItem.created_at >= datetime.combine(
-                from_date,
-                datetime.min.time()
-            )
+            WorkItem.created_at >= datetime.combine(from_date, datetime.min.time())
         )
 
     if to_date:
         query = query.filter(
-            WorkItem.created_at <= datetime.combine(
-                to_date,
-                datetime.max.time()
-            )
+            WorkItem.created_at <= datetime.combine(to_date, datetime.max.time())
         )
     
     query = query.order_by(WorkItem.created_at.desc())
     
     items = query.offset(skip).limit(limit).all()
+    
+    # ✅ Attach total_logged_hours
+    _attach_logged_hours_batch(db, items)
+    
     return items
 
 
@@ -249,7 +272,8 @@ def find_similar_tickets(
             "similarity_score": score,
             "has_rca": has_rca,
             "has_solution": has_solution,
-            "completed_at": ticket.completed_at
+            "completed_at": ticket.completed_at,
+            "client_expected_date": ticket.client_expected_date
         })
     
     result.sort(key=lambda x: x["similarity_score"], reverse=True)
@@ -335,6 +359,8 @@ def read_item(
     item = db.query(WorkItem).filter(WorkItem.id == item_id).first()
     if item is None:
         raise HTTPException(status_code=404, detail="Item not found")
+    
+    _attach_logged_hours(db, item)
     return item
 
 
@@ -356,18 +382,25 @@ def update_item(
     old_status = item.status
     update_data = item_update.dict(exclude_unset=True)
     
+    # Ignore frontend's completed_at
+    if 'completed_at' in update_data:
+        update_data.pop('completed_at', None)
+    
     for field, value in update_data.items():
         if hasattr(item, field):
             setattr(item, field, value)
     
+    # ✅ FIX: Local time (not UTC) — DB server_default=func.now() uses local time
     if 'status' in update_data and update_data['status'] == 'done' and old_status != 'done':
-        item.completed_at = datetime.now(timezone.utc)
+        item.completed_at = datetime.now()
     elif 'status' in update_data and update_data['status'] != 'done' and old_status == 'done':
         item.completed_at = None
     
-    item.updated_at = datetime.now(timezone.utc)
+    item.updated_at = datetime.now()
     db.commit()
     db.refresh(item)
+    
+    _attach_logged_hours(db, item)
     
     notify_users = []
     if item.assignee_id and item.assignee_id != current_user.id:
@@ -465,6 +498,8 @@ def assign_item(
     item.assignee_id = assignment.assignee_id
     db.commit()
     db.refresh(item)
+    
+    _attach_logged_hours(db, item)
     
     if old_assignee_id != assignment.assignee_id:
         notify_ticket_assigned(db, item_id, assignment.assignee_id, item.reporter_id, current_user.id)

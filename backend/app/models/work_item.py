@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Enum, Numeric, Boolean
+from sqlalchemy import Column, Integer, String, Text, DateTime, Date, ForeignKey, Enum, Numeric, Boolean
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.database import Base
@@ -31,6 +31,9 @@ class WorkItem(Base):
     priority = Column(Enum('critical', 'high', 'normal', 'low', name='item_priority'), default='normal')
     reporter_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     assignee_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    
+    # ✅ NEW: Client Expected Date (only for DialDesk / HQ branch users)
+    client_expected_date = Column(Date, nullable=True)
     
     # Date tracking
     start_date = Column(DateTime(timezone=True), nullable=True)

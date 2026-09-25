@@ -48,6 +48,14 @@ export default function CreateItem() {
     return isAllowedBranch()
   }
 
+  // Check if user can see client expected date (ONLY Dialdesk and HQ)
+  const canSeeClientExpectedDate = () => {
+    if (!user) return false
+    const allowedBranches = ['dialdesk', 'hq', 'Dialdesk', 'HQ', 'DIALDESK']
+    const branchName = user.branch?.name || ''
+    return allowedBranches.includes(branchName) || allowedBranches.includes(branchName.toLowerCase())
+  }
+
   useEffect(() => {
     fetchUsers()
     fetchBranches()
@@ -155,6 +163,11 @@ export default function CreateItem() {
         branch_id: user?.branch_id || null,
         client_id: data.client_id || null,
         client_name: selectedClient ? selectedClient.company_name : null,
+      }
+
+      // Add client_expected_date ONLY for Dialdesk and HQ branches
+      if (canSeeClientExpectedDate() && data.client_expected_date) {
+        itemData.client_expected_date = data.client_expected_date
       }
 
       console.log('Creating ticket with data:', itemData)
@@ -480,6 +493,25 @@ export default function CreateItem() {
                 </select>
               </div>
             </div>
+
+            {/* Client Expected Date - ONLY for Dialdesk and HQ branches */}
+            {canSeeClientExpectedDate() && (
+              <div>
+                <label htmlFor="client_expected_date" className="block text-sm font-medium text-gray-700 mb-1">
+                  📅 Client Expected Date <span className="text-gray-400 text-xs">(Optional)</span>
+                </label>
+                <input
+                  type="date"
+                  id="client_expected_date"
+                  {...register('client_expected_date')}
+                  className="input"
+                  min={new Date().toISOString().split('T')[0]}
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  💡 Set the date by which the client expects this ticket to be resolved.
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
