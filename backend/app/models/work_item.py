@@ -16,24 +16,26 @@ class WorkItem(Base):
     type = Column(Enum('support', 'feature', name='item_type'), nullable=False)
     status = Column(
         Enum(
-            'backlog',
-            'in_progress',
-            'review',
-            'pending_client',
-            'pending_requester',
-            'done',
-            'rejected',
+            'backlog', 'in_progress', 'review', 'pending_client',
+            'pending_requester', 'done', 'rejected',
             name='item_status'
         ),
-        nullable=False,
-        default='backlog'
+        nullable=False, default='backlog'
     )
     priority = Column(Enum('critical', 'high', 'normal', 'low', name='item_priority'), default='normal')
     reporter_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     assignee_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     
-    # ✅ NEW: Client Expected Date (only for DialDesk / HQ branch users)
+    # Client Expected Date
     client_expected_date = Column(Date, nullable=True)
+    
+    # ✅ NEW: Rescheduled tracking
+    is_rescheduled = Column(Boolean, default=False)
+    original_expected_date = Column(Date, nullable=True)
+    reschedule_reason = Column(Text, nullable=True)
+    rescheduled_at = Column(DateTime(timezone=True), nullable=True)
+    rescheduled_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    reschedule_count = Column(Integer, default=0)
     
     # Date tracking
     start_date = Column(DateTime(timezone=True), nullable=True)
@@ -60,5 +62,6 @@ class WorkItem(Base):
     branch = relationship("Branch", back_populates="work_items")
     reporter = relationship("User", foreign_keys=[reporter_id], back_populates="reported_items")
     assignee = relationship("User", foreign_keys=[assignee_id], back_populates="assigned_items")
+    rescheduler = relationship("User", foreign_keys=[rescheduled_by])
     comments = relationship("ItemComment", back_populates="work_item", cascade="all, delete-orphan")
     time_entries = relationship("TimeEntry", back_populates="work_item", cascade="all, delete-orphan")

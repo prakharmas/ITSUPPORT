@@ -81,6 +81,13 @@ class WorkItemUpdate(BaseModel):
     is_recurring: Optional[bool] = None
     rca_notes: Optional[str] = None
     solution_notes: Optional[str] = None
+    # ✅ NEW: Reschedule fields
+    is_rescheduled: Optional[bool] = None
+    original_expected_date: Optional[date] = None
+    reschedule_reason: Optional[str] = None
+    rescheduled_at: Optional[datetime] = None
+    rescheduled_by: Optional[int] = None
+    reschedule_count: Optional[int] = None
 
 class WorkItem(WorkItemBase):
     id: int
@@ -90,14 +97,25 @@ class WorkItem(WorkItemBase):
     completed_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
-    # ✅ NEW: Total logged hours from time_entries
     total_logged_hours: Optional[float] = 0
+    # ✅ NEW: Reschedule fields in response
+    is_rescheduled: Optional[bool] = False
+    original_expected_date: Optional[date] = None
+    reschedule_reason: Optional[str] = None
+    rescheduled_at: Optional[datetime] = None
+    rescheduled_by: Optional[int] = None
+    reschedule_count: Optional[int] = 0
     
     class Config:
         from_attributes = True
 
 class WorkItemAssign(BaseModel):
     assignee_id: int
+
+# ✅ NEW: Reschedule request
+class WorkItemReschedule(BaseModel):
+    new_expected_date: date
+    reason: str
 
 class CommentBase(BaseModel):
     body: str

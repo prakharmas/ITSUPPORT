@@ -9,7 +9,11 @@ from app.models.user import User
 from app.models.work_item import WorkItem
 from app.models.item_comment import ItemComment
 from app.models.time_entry import TimeEntry
-from app.schemas.work_item import WorkItem as WorkItemSchema, WorkItemCreate, WorkItemUpdate, WorkItemWithComments, WorkItemAssign
+from app.schemas.work_item import (
+    WorkItem as WorkItemSchema,
+    WorkItemCreate, WorkItemUpdate, WorkItemWithComments, WorkItemAssign,
+    WorkItemReschedule
+)
 from app.schemas.work_item import CommentCreate, Comment
 from app.auth import get_current_active_user
 from app.services.notification_service import (
@@ -22,7 +26,6 @@ from app.services.notification_service import (
 router = APIRouter()
 
 
-# Helper to attach total logged hours to a single item
 def _attach_logged_hours(db: Session, item: WorkItem):
     if item is None:
         return
@@ -32,7 +35,6 @@ def _attach_logged_hours(db: Session, item: WorkItem):
     item.total_logged_hours = float(total or 0)
 
 
-# Helper to attach total logged hours to multiple items (batch)
 def _attach_logged_hours_batch(db: Session, items: List[WorkItem]):
     if not items:
         return
@@ -84,7 +86,10 @@ def create_item(
         solution_status=item.solution_status if hasattr(item, 'solution_status') else "pending",
         is_recurring=item.is_recurring if hasattr(item, 'is_recurring') else False,
         rca_notes=item.rca_notes if hasattr(item, 'rca_notes') else None,
-        solution_notes=item.solution_notes if hasattr(item, 'solution_notes') else None
+        solution_notes=item.solution_notes if hasattr(item, 'solution_notes') else None,
+        # ✅ NEW: Initialize reschedule fields
+        is_rescheduled=False,
+        reschedule_count=0,
     )
     db.add(db_item)
     db.commit()
@@ -99,7 +104,7 @@ def create_item(
 
 
 # ============================================================
-# READ ITEMS (with filters)
+# READ ITEMS
 # ============================================================
 @router.get("/", response_model=List[WorkItemSchema])
 @router.get("", response_model=List[WorkItemSchema])
@@ -112,6 +117,8 @@ def read_items(
     branch_id: Optional[int] = Query(None),
     client_id: Optional[str] = Query(None),
     is_recurring: Optional[bool] = Query(None),
+    # ✅ NEW: Filter for rescheduled tickets
+    is_rescheduled: Optional[bool] = Query(None),
     from_date: Optional[date] = Query(None),
     to_date: Optional[date] = Query(None),
     search: Optional[str] = Query(None),
@@ -135,6 +142,10 @@ def read_items(
     
     if is_recurring is not None:
         query = query.filter(WorkItem.is_recurring == is_recurring)
+    
+    # ✅ NEW: Rescheduled filter
+    if is_rescheduled is not None:
+        query = query.filter(WorkItem.is_rescheduled == is_rescheduled)
     
     if type:
         query = query.filter(WorkItem.type == type)
@@ -184,14 +195,13 @@ def read_items(
     
     items = query.offset(skip).limit(limit).all()
     
-    # ✅ Attach total_logged_hours
     _attach_logged_hours_batch(db, items)
     
     return items
 
 
 # ============================================================
-# FIND SIMILAR TICKETS
+# FIND SIMILAR
 # ============================================================
 @router.get("/similar/find")
 def find_similar_tickets(
@@ -206,7 +216,6 @@ def find_similar_tickets(
         WorkItem.status != 'done',
         WorkItem.status != 'rejected'
     )
-    
     if branch_id:
         query = query.filter(WorkItem.branch_id == branch_id)
     
@@ -234,25 +243,15 @@ def find_similar_tickets(
     result = []
     for ticket in similar:
         score = 0
-        ticket_title_lower = ticket.title.lower()
-        
-        for keyword in keywords:
-            if keyword in ticket_title_lower:
-                score += 20
-        
+        tl = ticket.title.lower()
+        for kw in keywords:
+            if kw in tl: score += 20
         if description and ticket.description:
-            desc_lower = ticket.description.lower()
-            for keyword in keywords:
-                if keyword in desc_lower:
-                    score += 10
-        
-        if title.lower() in ticket_title_lower:
-            score += 30
-        
+            dl = ticket.description.lower()
+            for kw in keywords:
+                if kw in dl: score += 10
+        if title.lower() in tl: score += 30
         score = min(score, 100)
-        
-        has_rca = ticket.rca_status and ticket.rca_status not in ['pending', None]
-        has_solution = ticket.solution_status and ticket.solution_status not in ['pending', None]
         
         result.append({
             "id": ticket.id,
@@ -270,19 +269,17 @@ def find_similar_tickets(
             "rca_notes": ticket.rca_notes,
             "solution_notes": ticket.solution_notes,
             "similarity_score": score,
-            "has_rca": has_rca,
-            "has_solution": has_solution,
+            "has_rca": ticket.rca_status and ticket.rca_status not in ['pending', None],
+            "has_solution": ticket.solution_status and ticket.solution_status not in ['pending', None],
             "completed_at": ticket.completed_at,
-            "client_expected_date": ticket.client_expected_date
+            "client_expected_date": ticket.client_expected_date,
+            "is_rescheduled": ticket.is_rescheduled,
         })
     
     result.sort(key=lambda x: x["similarity_score"], reverse=True)
     return result
 
 
-# ============================================================
-# GET SIMILAR TICKETS BY ID
-# ============================================================
 @router.get("/similar/{item_id}")
 def get_similar_tickets_by_id(
     item_id: int,
@@ -323,12 +320,10 @@ def get_similar_tickets_by_id(
     result = []
     for ticket in similar:
         score = 0
-        ticket_title_lower = ticket.title.lower()
-        for keyword in keywords:
-            if keyword in ticket_title_lower:
-                score += 20
+        tl = ticket.title.lower()
+        for kw in keywords:
+            if kw in tl: score += 20
         score = min(score, 100)
-        
         result.append({
             "id": ticket.id,
             "title": ticket.title,
@@ -347,7 +342,7 @@ def get_similar_tickets_by_id(
 
 
 # ============================================================
-# READ SINGLE ITEM
+# READ SINGLE
 # ============================================================
 @router.get("/{item_id}", response_model=WorkItemWithComments)
 @router.get("{item_id}", response_model=WorkItemWithComments)
@@ -359,7 +354,6 @@ def read_item(
     item = db.query(WorkItem).filter(WorkItem.id == item_id).first()
     if item is None:
         raise HTTPException(status_code=404, detail="Item not found")
-    
     _attach_logged_hours(db, item)
     return item
 
@@ -382,15 +376,18 @@ def update_item(
     old_status = item.status
     update_data = item_update.dict(exclude_unset=True)
     
-    # Ignore frontend's completed_at
     if 'completed_at' in update_data:
         update_data.pop('completed_at', None)
+    
+    # Prevent clients from directly modifying reschedule fields via generic update
+    for protected in ['is_rescheduled', 'original_expected_date', 'reschedule_reason',
+                      'rescheduled_at', 'rescheduled_by', 'reschedule_count']:
+        update_data.pop(protected, None)
     
     for field, value in update_data.items():
         if hasattr(item, field):
             setattr(item, field, value)
     
-    # ✅ FIX: Local time (not UTC) — DB server_default=func.now() uses local time
     if 'status' in update_data and update_data['status'] == 'done' and old_status != 'done':
         item.completed_at = datetime.now()
     elif 'status' in update_data and update_data['status'] != 'done' and old_status == 'done':
@@ -417,7 +414,68 @@ def update_item(
 
 
 # ============================================================
-# CREATE COMMENT
+# ✅ NEW: RESCHEDULE ITEM
+# ============================================================
+@router.patch("/{item_id}/reschedule", response_model=WorkItemSchema)
+@router.patch("{item_id}/reschedule", response_model=WorkItemSchema)
+def reschedule_item(
+    item_id: int,
+    payload: WorkItemReschedule,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    item = db.query(WorkItem).filter(WorkItem.id == item_id).first()
+    if item is None:
+        raise HTTPException(status_code=404, detail="Item not found")
+    
+    # Only PM/Admin/Dev assigned can reschedule
+    if current_user.role not in ['pm', 'dev', 'admin']:
+        raise HTTPException(status_code=403, detail="Only PM, Dev or Admin can reschedule")
+    
+    if not payload.reason or len(payload.reason.strip()) < 5:
+        raise HTTPException(status_code=400, detail="Reschedule reason is required (min 5 chars)")
+    
+    # Prevent rescheduling already closed tickets
+    if item.status in ['done', 'rejected']:
+        raise HTTPException(status_code=400, detail="Cannot reschedule a closed/rejected ticket")
+    
+    # Save original date only the first time
+    if not item.original_expected_date and item.client_expected_date:
+        item.original_expected_date = item.client_expected_date
+    
+    # Set reschedule metadata
+    item.client_expected_date = payload.new_expected_date
+    item.is_rescheduled = True
+    item.reschedule_reason = payload.reason.strip()
+    item.rescheduled_at = datetime.now()
+    item.rescheduled_by = current_user.id
+    item.reschedule_count = (item.reschedule_count or 0) + 1
+    item.updated_at = datetime.now()
+    
+    db.commit()
+    db.refresh(item)
+    
+    _attach_logged_hours(db, item)
+    
+    # Add comment
+    orig = item.original_expected_date.strftime('%d/%m/%Y') if item.original_expected_date else '-'
+    new_d = payload.new_expected_date.strftime('%d/%m/%Y')
+    try:
+        db_comment = ItemComment(
+            item_id=item_id,
+            user_id=current_user.id,
+            body=f"🔄 TICKET RESCHEDULED by {current_user.name}\n\n📅 Original Expected: {orig}\n📅 New Expected: {new_d}\n\n📝 Reason:\n{payload.reason.strip()}"
+        )
+        db.add(db_comment)
+        db.commit()
+    except Exception as e:
+        print(f"Failed to add reschedule comment: {e}")
+    
+    return item
+
+
+# ============================================================
+# COMMENTS
 # ============================================================
 @router.post("/{item_id}/comments", response_model=Comment)
 @router.post("{item_id}/comments", response_model=Comment)
@@ -452,9 +510,6 @@ def create_comment(
     return db_comment
 
 
-# ============================================================
-# READ COMMENTS
-# ============================================================
 @router.get("/{item_id}/comments", response_model=List[Comment])
 @router.get("{item_id}/comments", response_model=List[Comment])
 def read_comments(
@@ -465,13 +520,11 @@ def read_comments(
     item = db.query(WorkItem).filter(WorkItem.id == item_id).first()
     if item is None:
         raise HTTPException(status_code=404, detail="Item not found")
-    
-    comments = db.query(ItemComment).filter(ItemComment.item_id == item_id).order_by(ItemComment.created_at.asc()).all()
-    return comments
+    return db.query(ItemComment).filter(ItemComment.item_id == item_id).order_by(ItemComment.created_at.asc()).all()
 
 
 # ============================================================
-# ASSIGN ITEM
+# ASSIGN
 # ============================================================
 @router.patch("/{item_id}/assign", response_model=WorkItemSchema)
 @router.patch("{item_id}/assign", response_model=WorkItemSchema)
