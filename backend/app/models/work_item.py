@@ -29,7 +29,7 @@ class WorkItem(Base):
     # Client Expected Date
     client_expected_date = Column(Date, nullable=True)
     
-    # ✅ NEW: Rescheduled tracking
+    # ✅ Rescheduled tracking
     is_rescheduled = Column(Boolean, default=False)
     original_expected_date = Column(Date, nullable=True)
     reschedule_reason = Column(Text, nullable=True)
@@ -43,6 +43,9 @@ class WorkItem(Base):
     due_at = Column(DateTime(timezone=True), nullable=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)
     sla_hours = Column(Integer, nullable=True)
+    
+    # ✅ NEW: Assignment tracking (for live dashboard)
+    assigned_at = Column(DateTime(timezone=True), nullable=True)
     
     # Time tracking
     estimated_hours = Column(Numeric(5, 2), nullable=True)

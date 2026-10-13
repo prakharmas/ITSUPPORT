@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 from app.database import init_db
 from app.routers import auth, users, items, oncall, reports, branches, activity_reports, notifications, attachments, time_tracking, crm
 from app.scheduler import start_scheduler
+from app.routers import dashboard 
 
 load_dotenv()
 
@@ -48,6 +49,7 @@ app.include_router(notifications.router, prefix="/notifications", tags=["notific
 app.include_router(attachments.router, prefix="/attachments", tags=["attachments"])
 app.include_router(time_tracking.router, prefix="/time-tracking", tags=["time-tracking"])
 app.include_router(crm.router, prefix="/crm", tags=["crm"])
+app.include_router(dashboard.router, prefix="/dashboard", tags=["dashboard"])
 
 @app.get("/")
 async def root():

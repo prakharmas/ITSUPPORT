@@ -12,6 +12,7 @@ import Reports from './pages/Reports'
 import TimeReports from './pages/TimeReports'
 import Settings from './pages/Settings'
 import ClientAnalysis from './pages/ClientAnalysis'
+import LiveDashboard from './pages/LiveDashboard'
 
 function App() {
   const { user, loading } = useAuth()
@@ -47,6 +48,8 @@ function App() {
         <Route path="/settings" element={<Settings />} />
         <Route path="/client-analysis" element={<ClientAnalysis />} />
         <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="/live" element={<LiveDashboard />} />
+
       </Routes>
     </Layout>
   )
