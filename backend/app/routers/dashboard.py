@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from datetime import date
 from typing import Optional
@@ -13,13 +13,13 @@ router = APIRouter()
 
 
 def _allowed_branch(user: User) -> bool:
+    """Only DialDesk and HQ users (plus admin) can access Live Dashboard."""
     if not user:
         return False
     if user.role == 'admin':
         return True
     branch_name = (user.branch.name if user.branch else '') or ''
-    allowed = ['dialdesk', 'ispark', 'hq']
-    return branch_name.lower() in allowed
+    return branch_name.lower() in ['dialdesk', 'hq']
 
 
 @router.get("/live", response_model=LiveDashboardResponse)
@@ -29,15 +29,19 @@ def get_live_dashboard(
     current_user: User = Depends(get_current_active_user),
 ):
     """
-    Returns a single payload with all Live Dashboard data.
-    Only PM / Dev / Admin from Dialdesk, Ispark, HQ branches can access.
+    Single payload with all Live Dashboard data.
+    Access restricted to PM/Dev/Admin of DialDesk and HQ branches only.
     """
     if current_user.role not in ['pm', 'dev', 'admin']:
-        # Requesters can't access
-        from fastapi import HTTPException
-        raise HTTPException(status_code=403, detail="Access restricted")
-    # Branch restriction optional — comment out to allow all
-    # if not _allowed_branch(current_user):
-    #     from fastapi import HTTPException
-    #     raise HTTPException(status_code=403, detail="Branch restricted")
+        raise HTTPException(
+            status_code=403,
+            detail="Only PM, Dev and Admin can access Live Dashboard"
+        )
+
+    if not _allowed_branch(current_user):
+        raise HTTPException(
+            status_code=403,
+            detail="Live Dashboard is only available for DialDesk and HQ branches"
+        )
+
     return build_live_dashboard(db, for_date=for_date)

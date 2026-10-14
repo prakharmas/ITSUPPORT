@@ -46,6 +46,7 @@ export default function Layout({ children }) {
     }
   }
 
+  // Check if user's branch is Dialdesk, Ispark, or HQ
   const isAllowedBranch = () => {
     if (!user) return false
     const allowedBranches = ['dialdesk', 'ispark', 'hq', 'Dialdesk', 'Ispark', 'HQ', 'DIALDESK', 'ISPARK']
@@ -53,9 +54,19 @@ export default function Layout({ children }) {
     return allowedBranches.includes(branchName) || allowedBranches.includes(branchName.toLowerCase())
   }
 
+  // Check if user can access Client Analysis
   const canAccessClientAnalysis = user?.role !== 'requester' && isAllowedBranch()
-  const canAccessLiveTracker = user?.role === 'pm' || user?.role === 'dev' || user?.role === 'admin'
 
+  // ✅ NEW: Live Tracker sirf DialDesk + HQ walon ko (PM/Dev/Admin)
+  const canAccessLiveTracker = () => {
+    if (!user) return false
+    if (user.role === 'requester') return false
+    if (user.role === 'admin') return true
+    const branchName = (user.branch?.name || '').toLowerCase()
+    return branchName.includes('dialdesk') || branchName === 'hq' || branchName.includes('hq')
+  }
+
+  // Filter navigation based on user role and branch
   const filteredNavigation = navigation.filter((item) => {
     // Requester ko specific pages nahi dikhenge
     if (user?.role === 'requester') {
@@ -68,13 +79,13 @@ export default function Layout({ children }) {
       ].includes(item.name)
     }
 
-    // Client Analysis sirf allowed branches ke users ko
+    // Client Analysis sirf allowed branches (Dialdesk, Ispark, HQ) ke users ko
     if (item.name === 'Client Analysis' && !canAccessClientAnalysis) {
       return false
     }
 
-    // Live Tracker sirf PM / Dev / Admin ko
-    if (item.name === 'Live Tracker' && !canAccessLiveTracker) {
+    // ✅ Live Tracker sirf DialDesk + HQ branches ke PM/Dev/Admin ko
+    if (item.name === 'Live Tracker' && !canAccessLiveTracker()) {
       return false
     }
 
@@ -88,6 +99,7 @@ export default function Layout({ children }) {
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setSidebarOpen(false)} />
         <div className="fixed inset-y-0 left-0 flex w-72 flex-col">
           <div className="flex grow flex-col overflow-y-auto bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 px-4 pb-4 ring-1 ring-white/10">
+            {/* Mobile Logo */}
             <div className="flex h-16 items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl shadow-lg">
@@ -103,6 +115,7 @@ export default function Layout({ children }) {
               </button>
             </div>
 
+            {/* Mobile Navigation */}
             <nav className="flex flex-1 flex-col mt-4">
               <ul className="space-y-1">
                 {filteredNavigation.map((item) => {
@@ -129,6 +142,7 @@ export default function Layout({ children }) {
               </ul>
             </nav>
 
+            {/* Mobile User Section */}
             <div className="mt-auto pt-4 border-t border-white/10">
               <div className="flex items-center gap-3 px-2 py-3">
                 <div className="h-10 w-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
@@ -158,6 +172,7 @@ export default function Layout({ children }) {
       {/* Desktop sidebar */}
       <div className={`hidden lg:fixed lg:inset-y-0 lg:z-40 lg:flex lg:flex-col transition-all duration-300 ${sidebarCollapsed ? 'lg:w-20' : 'lg:w-64'}`}>
         <div className="flex grow flex-col overflow-y-auto bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 px-4 pb-4">
+          {/* Logo */}
           <div className="flex h-12 items-center gap-2 px-2">
             <div className="p-1.5 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg">
               <TicketIcon className="h-5 w-5 text-white" />
@@ -167,6 +182,7 @@ export default function Layout({ children }) {
             )}
           </div>
 
+          {/* Navigation */}
           <nav className="flex flex-1 flex-col mt-3">
             <ul className="space-y-0.5">
               {filteredNavigation.map((item) => {
@@ -200,6 +216,7 @@ export default function Layout({ children }) {
             </ul>
           </nav>
 
+          {/* User Section */}
           <div className="mt-auto pt-3 border-t border-white/10">
             <div className={`flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-white/5 transition-colors ${sidebarCollapsed ? 'justify-center' : ''}`}>
               <div className="h-8 w-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center flex-shrink-0">
@@ -229,9 +246,12 @@ export default function Layout({ children }) {
 
       {/* Main content */}
       <div className={`transition-all duration-300 ${sidebarCollapsed ? 'lg:pl-20' : 'lg:pl-64'}`}>
+        {/* Top Header Bar */}
         <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-xl border-b border-slate-200/50">
           <div className="flex items-center justify-between px-4 sm:px-6 h-12">
+            {/* Left side */}
             <div className="flex items-center gap-4">
+              {/* Mobile menu button */}
               <button
                 type="button"
                 className="lg:hidden p-2 rounded-xl text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors"
@@ -240,6 +260,7 @@ export default function Layout({ children }) {
                 <Bars3Icon className="h-6 w-6" />
               </button>
 
+              {/* Collapse button for desktop */}
               <button
                 type="button"
                 className="hidden lg:flex p-2 rounded-xl text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors"
@@ -248,6 +269,7 @@ export default function Layout({ children }) {
                 <Bars3Icon className="h-5 w-5" />
               </button>
 
+              {/* Breadcrumb/Title */}
               <div className="hidden sm:block">
                 <h1 className="text-sm font-semibold text-slate-800">
                   {navigation.find(n => n.href === location.pathname)?.name || 'IT Support'}
@@ -255,7 +277,9 @@ export default function Layout({ children }) {
               </div>
             </div>
 
+            {/* Right side */}
             <div className="flex items-center gap-2">
+              {/* User Info - Desktop */}
               <div className="hidden sm:flex items-center gap-2 pl-2 border-l border-slate-200">
                 <div className="text-right">
                   <p className="text-xs font-medium text-slate-800">{user?.name}</p>
@@ -268,8 +292,10 @@ export default function Layout({ children }) {
                 </div>
               </div>
 
+              {/* Notification Bell */}
               <NotificationBell />
 
+              {/* Logout Button */}
               <button
                 onClick={logout}
                 className="p-1.5 rounded-lg text-slate-500 hover:text-red-600 hover:bg-red-50 transition-colors"
@@ -281,6 +307,7 @@ export default function Layout({ children }) {
           </div>
         </header>
 
+        {/* Page Content */}
         <main className="min-h-[calc(100vh-3rem)]">
           <div className="p-3 sm:p-4">
             <div className="w-full max-w-none">

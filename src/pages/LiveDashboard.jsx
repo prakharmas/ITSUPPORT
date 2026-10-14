@@ -20,10 +20,29 @@ import {
   PauseIcon,
   PlayIcon,
   ChartBarSquareIcon,
-  InboxIcon,
 } from '@heroicons/react/24/outline'
 
 const REFRESH_INTERVAL_MS = 30000
+
+// ✅ Date filter options
+const DATE_FILTERS = [
+  { key: 'today', label: 'Today', icon: '📅' },
+  { key: 'yesterday', label: 'Yesterday', icon: '⏪' },
+  { key: '7days', label: 'Last 7 Days', icon: '📊' },
+  { key: '30days', label: 'Last 30 Days', icon: '📈' },
+]
+
+// ✅ Helper: get YYYY-MM-DD for a filter
+function getDateForFilter(key) {
+  const today = new Date()
+  if (key === 'today') return today
+  if (key === 'yesterday') {
+    const d = new Date(today)
+    d.setDate(d.getDate() - 1)
+    return d
+  }
+  return today
+}
 
 export default function LiveDashboard() {
   const { user } = useAuth()
@@ -32,12 +51,20 @@ export default function LiveDashboard() {
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [lastUpdated, setLastUpdated] = useState(null)
   const [error, setError] = useState(null)
+  const [dateFilter, setDateFilter] = useState('today') // ✅ NEW
   const intervalRef = useRef(null)
 
   const fetchData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
     try {
-      const res = await api.get('/dashboard/live')
+      // ✅ Pass selected date as for_date
+      const forDate = getDateForFilter(dateFilter)
+      const dateStr = forDate.toISOString().split('T')[0]
+      const url = dateFilter === 'today'
+        ? '/dashboard/live'
+        : `/dashboard/live?for_date=${dateStr}`
+
+      const res = await api.get(url)
       setData(res.data)
       setLastUpdated(new Date())
       setError(null)
@@ -48,21 +75,22 @@ export default function LiveDashboard() {
     } finally {
       if (!silent) setLoading(false)
     }
-  }, [])
+  }, [dateFilter])
 
   useEffect(() => {
     fetchData()
   }, [fetchData])
 
+  // ✅ Auto-refresh: only for "today" filter
   useEffect(() => {
     if (intervalRef.current) clearInterval(intervalRef.current)
-    if (autoRefresh) {
+    if (autoRefresh && dateFilter === 'today') {
       intervalRef.current = setInterval(() => fetchData(true), REFRESH_INTERVAL_MS)
     }
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current)
     }
-  }, [autoRefresh, fetchData])
+  }, [autoRefresh, dateFilter, fetchData])
 
   const canAccess = user?.role === 'pm' || user?.role === 'dev' || user?.role === 'admin'
 
@@ -105,6 +133,13 @@ export default function LiveDashboard() {
   const hasTrendData = trend.some(t => t.created > 0 || t.assigned > 0 || t.closed > 0)
   const hasTeamActivity = team.some(t => t.total_active > 0 || t.closed_today > 0)
 
+  // ✅ Dynamic labels based on filter
+  const filterLabel = DATE_FILTERS.find(f => f.key === dateFilter)?.label || 'Today'
+  const isToday = dateFilter === 'today'
+  const createdLabel = isToday ? 'Created Today' : `Created (${filterLabel})`
+  const assignedLabel = isToday ? 'Assigned Today' : `Assigned (${filterLabel})`
+  const closedLabel = isToday ? 'Closed Today' : `Closed (${filterLabel})`
+
   return (
     <div className="w-full max-w-none space-y-4 animate-fade-in">
       {/* ============ HEADER ============ */}
@@ -133,17 +168,20 @@ export default function LiveDashboard() {
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => setAutoRefresh(!autoRefresh)}
-              className={`btn text-xs py-1.5 px-3 flex items-center gap-1.5 shadow-md ${
-                autoRefresh
-                  ? 'bg-green-500 text-white hover:bg-green-600 shadow-green-500/30'
-                  : 'bg-gray-500 text-white hover:bg-gray-600'
-              }`}
-            >
-              {autoRefresh ? <PauseIcon className="h-4 w-4" /> : <PlayIcon className="h-4 w-4" />}
-              {autoRefresh ? 'Auto ON' : 'Auto OFF'}
-            </button>
+            {/* ✅ Auto-refresh only for today */}
+            {isToday && (
+              <button
+                onClick={() => setAutoRefresh(!autoRefresh)}
+                className={`btn text-xs py-1.5 px-3 flex items-center gap-1.5 shadow-md ${
+                  autoRefresh
+                    ? 'bg-green-500 text-white hover:bg-green-600 shadow-green-500/30'
+                    : 'bg-gray-500 text-white hover:bg-gray-600'
+                }`}
+              >
+                {autoRefresh ? <PauseIcon className="h-4 w-4" /> : <PlayIcon className="h-4 w-4" />}
+                {autoRefresh ? 'Auto ON' : 'Auto OFF'}
+              </button>
+            )}
             <button
               onClick={() => fetchData()}
               disabled={loading}
@@ -156,6 +194,60 @@ export default function LiveDashboard() {
               ← Board
             </Link>
           </div>
+        </div>
+      </div>
+
+      {/* ============ ✅ DATE FILTER BAR ============ */}
+      <div className="card">
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <CalendarDaysIcon className="h-5 w-5 text-gray-500" />
+            <span className="text-sm font-semibold text-gray-700">View:</span>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            {DATE_FILTERS.map((f) => {
+              const active = dateFilter === f.key
+              return (
+                <button
+                  key={f.key}
+                  onClick={() => setDateFilter(f.key)}
+                  className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 ${
+                    active
+                      ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-lg shadow-indigo-500/30 scale-105'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200 hover:scale-105'
+                  }`}
+                >
+                  <span>{f.icon}</span>
+                  {f.label}
+                </button>
+              )
+            })}
+          </div>
+
+          {!isToday && (
+            <span className="text-xs text-gray-500 ml-auto flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+              Historical view — auto-refresh disabled
+            </span>
+          )}
+        </div>
+
+        {/* ✅ Show selected date range */}
+        <div className="mt-3 flex items-center gap-3 text-xs text-gray-500 border-t border-gray-100 pt-2">
+          <span>
+            Showing data for:{' '}
+            <strong className="text-gray-700">
+              {dateFilter === 'today' && new Date().toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
+              {dateFilter === 'yesterday' && (() => {
+                const d = new Date()
+                d.setDate(d.getDate() - 1)
+                return d.toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })
+              })()}
+              {dateFilter === '7days' && 'Last 7 Days (aggregate counts)'}
+              {dateFilter === '30days' && 'Last 30 Days (aggregate counts)'}
+            </strong>
+          </span>
         </div>
       </div>
 
@@ -184,7 +276,7 @@ export default function LiveDashboard() {
           {/* ============ HERO KPI CARDS ============ */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
             <KpiCard
-              label="Created Today"
+              label={createdLabel}
               value={today.created}
               icon={<PlusCircleIcon className="h-6 w-6" />}
               gradient="from-blue-500 to-indigo-600"
@@ -192,7 +284,7 @@ export default function LiveDashboard() {
               subtext="new tickets"
             />
             <KpiCard
-              label="Assigned Today"
+              label={assignedLabel}
               value={today.assigned}
               icon={<UserPlusIcon className="h-6 w-6" />}
               gradient="from-purple-500 to-violet-600"
@@ -200,7 +292,7 @@ export default function LiveDashboard() {
               subtext="to team"
             />
             <KpiCard
-              label="Closed Today"
+              label={closedLabel}
               value={today.closed}
               icon={<CheckCircleIcon className="h-6 w-6" />}
               gradient="from-emerald-500 to-teal-600"
@@ -229,13 +321,13 @@ export default function LiveDashboard() {
           {/* ============ SECONDARY STATS ============ */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <SmallStatCard
-              label="Rescheduled Today"
+              label={isToday ? 'Rescheduled Today' : `Rescheduled (${filterLabel})`}
               value={today.rescheduled}
               icon={<ArrowPathRoundedSquareIcon className="h-5 w-5" />}
               color="amber"
             />
             <SmallStatCard
-              label="Reopened Today"
+              label={isToday ? 'Reopened Today' : `Reopened (${filterLabel})`}
               value={today.reopened}
               icon={<ArrowPathIcon className="h-5 w-5" />}
               color="rose"
@@ -250,7 +342,6 @@ export default function LiveDashboard() {
 
           {/* ============ TREND + TEAM ============ */}
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-3">
-            {/* Trend — 3/5 width */}
             <div className="lg:col-span-3 card">
               <div className="flex items-center gap-2 mb-4">
                 <div className="p-2 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-lg">
@@ -301,7 +392,6 @@ export default function LiveDashboard() {
               )}
             </div>
 
-            {/* Team Workload — 2/5 width */}
             <div className="lg:col-span-2 card">
               <div className="flex items-center gap-2 mb-4">
                 <div className="p-2 bg-gradient-to-br from-pink-500 to-rose-600 rounded-lg">
@@ -379,11 +469,11 @@ export default function LiveDashboard() {
           {/* ============ TOP 10 LISTS ============ */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
             <LiveTopList
-              title="Just Created Today"
+              title={isToday ? 'Just Created Today' : `Created (${filterLabel})`}
               icon={<PlusCircleIcon className="h-4 w-4" />}
               items={data.top_created_today}
               accentColor="blue"
-              emptyText="No tickets created today"
+              emptyText={`No tickets created ${isToday ? 'today' : 'in this period'}`}
               renderRow={(t) => (
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="text-xs font-bold text-gray-500 flex-shrink-0">#{t.id}</span>
@@ -403,11 +493,11 @@ export default function LiveDashboard() {
             />
 
             <LiveTopList
-              title="Just Assigned Today"
+              title={isToday ? 'Just Assigned Today' : `Assigned (${filterLabel})`}
               icon={<UserPlusIcon className="h-4 w-4" />}
               items={data.top_assigned_today}
               accentColor="purple"
-              emptyText="No assignments today"
+              emptyText={`No assignments ${isToday ? 'today' : 'in this period'}`}
               renderRow={(t) => (
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="text-xs font-bold text-gray-500 flex-shrink-0">#{t.id}</span>
@@ -425,11 +515,11 @@ export default function LiveDashboard() {
             />
 
             <LiveTopList
-              title="Closed Today"
+              title={isToday ? 'Closed Today' : `Closed (${filterLabel})`}
               icon={<CheckCircleIcon className="h-4 w-4" />}
               items={data.top_closed_today}
               accentColor="emerald"
-              emptyText="No tickets closed today"
+              emptyText={`No tickets closed ${isToday ? 'today' : 'in this period'}`}
               renderRow={(t) => (
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="text-xs font-bold text-gray-500 flex-shrink-0">#{t.id}</span>
@@ -478,11 +568,11 @@ export default function LiveDashboard() {
             />
 
             <LiveTopList
-              title="Rescheduled Today"
+              title={isToday ? 'Rescheduled Today' : `Rescheduled (${filterLabel})`}
               icon={<ArrowPathRoundedSquareIcon className="h-4 w-4" />}
               items={data.top_rescheduled}
               accentColor="amber"
-              emptyText="No reschedules today"
+              emptyText={`No reschedules ${isToday ? 'today' : 'in this period'}`}
               renderRow={(t) => (
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="text-xs font-bold text-gray-500 flex-shrink-0">#{t.id}</span>
@@ -500,9 +590,11 @@ export default function LiveDashboard() {
           {/* ============ FOOTER ============ */}
           <div className="flex items-center justify-center gap-3 py-3">
             <div className="flex items-center gap-2 px-3 py-1.5 bg-white rounded-full shadow-sm border border-gray-200">
-              <span className={`w-2 h-2 rounded-full ${autoRefresh ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`}></span>
+              <span className={`w-2 h-2 rounded-full ${isToday && autoRefresh ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`}></span>
               <span className="text-xs text-gray-600 font-medium">
-                {autoRefresh ? `Auto-refreshing every ${REFRESH_INTERVAL_MS / 1000}s` : 'Auto-refresh is OFF'}
+                {isToday
+                  ? (autoRefresh ? `Auto-refreshing every ${REFRESH_INTERVAL_MS / 1000}s` : 'Auto-refresh is OFF')
+                  : `Viewing ${filterLabel} — auto-refresh disabled`}
               </span>
             </div>
           </div>

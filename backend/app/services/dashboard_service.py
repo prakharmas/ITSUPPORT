@@ -36,6 +36,15 @@ def _closing_hours_map(db: Session, ticket_ids: List[int]) -> dict:
     return {r.work_item_id: float(r.total or 0) for r in rows}
 
 
+# ✅ NEW: Restrict team workload to DialDesk + HQ only
+def _get_allowed_branch_ids(db: Session) -> List[int]:
+    """Returns branch IDs for DialDesk and HQ only."""
+    branches = db.query(Branch).filter(
+        func.lower(Branch.name).in_(['dialdesk', 'hq'])
+    ).all()
+    return [b.id for b in branches]
+
+
 def build_live_dashboard(db: Session, for_date: Optional[date] = None) -> dict:
     """Aggregate all live dashboard data in one pass."""
     today = for_date or date.today()
@@ -63,7 +72,7 @@ def build_live_dashboard(db: Session, for_date: Optional[date] = None) -> dict:
     )
     closed_today = closed_today_q.count()
 
-    # ✅ FIXED: Iterate in Python (timezone-safe, no func.cast magic)
+    # Iterate in Python (timezone-safe)
     closed_tickets_today = closed_today_q.all()
     closed_on_time = 0
     closed_delayed = 0
@@ -130,9 +139,17 @@ def build_live_dashboard(db: Session, for_date: Optional[date] = None) -> dict:
         })
 
     # ============================================================
-    # TEAM WORKLOAD
+    # TEAM WORKLOAD — ✅ ONLY DialDesk + HQ users
     # ============================================================
-    devs = db.query(User).filter(User.role.in_(['dev', 'pm']), User.is_active == True).all()
+    allowed_branch_ids = _get_allowed_branch_ids(db)
+    print(f"✅ Live Dashboard — Allowed branch IDs (DialDesk + HQ): {allowed_branch_ids}")
+
+    devs = db.query(User).filter(
+        User.role.in_(['dev', 'pm']),
+        User.is_active == True,
+        User.branch_id.in_(allowed_branch_ids) if allowed_branch_ids else False
+    ).all()
+
     team = []
     for u in devs:
         open_count = db.query(WorkItem).filter(
