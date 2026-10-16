@@ -25,6 +25,7 @@ def _allowed_branch(user: User) -> bool:
 @router.get("/live", response_model=LiveDashboardResponse)
 def get_live_dashboard(
     for_date: Optional[date] = Query(None, description="YYYY-MM-DD, defaults to today"),
+    range_days: Optional[int] = Query(None, description="If set, aggregates over last N days ending on for_date"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
@@ -44,4 +45,4 @@ def get_live_dashboard(
             detail="Live Dashboard is only available for DialDesk and HQ branches"
         )
 
-    return build_live_dashboard(db, for_date=for_date)
+    return build_live_dashboard(db, for_date=for_date, range_days=range_days)

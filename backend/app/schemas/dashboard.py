@@ -94,6 +94,19 @@ class TopRescheduledItem(BaseModel):
     reschedule_count: int = 0
 
 
+# ✅ NEW: Assignment breakdown per user
+class AssignmentBreakdownItem(BaseModel):
+    user_id: Optional[int] = None
+    name: str
+    role: Optional[str] = None
+    branch_name: Optional[str] = None
+    today: int = 0
+    yesterday: int = 0
+    last_7_days: int = 0
+    last_30_days: int = 0
+    total_active: int = 0
+
+
 class LiveDashboardResponse(BaseModel):
     generated_at: datetime
     today: TodayStats
@@ -104,3 +117,5 @@ class LiveDashboardResponse(BaseModel):
     top_closed_today: List[TopClosedItem]
     top_overdue: List[TopOverdueItem]
     top_rescheduled: List[TopRescheduledItem]
+    # ✅ NEW
+    assignment_breakdown: List[AssignmentBreakdownItem] = []

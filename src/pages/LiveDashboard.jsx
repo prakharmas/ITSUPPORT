@@ -12,7 +12,6 @@ import {
   CheckCircleIcon,
   ExclamationTriangleIcon,
   CalendarDaysIcon,
-  ClockIcon,
   UserGroupIcon,
   FireIcon,
   SparklesIcon,
@@ -20,28 +19,35 @@ import {
   PauseIcon,
   PlayIcon,
   ChartBarSquareIcon,
+  UserMinusIcon,
 } from '@heroicons/react/24/outline'
 
 const REFRESH_INTERVAL_MS = 30000
 
-// ✅ Date filter options
-const DATE_FILTERS = [
+// ✅ Filter types
+const FILTERS = [
   { key: 'today', label: 'Today', icon: '📅' },
   { key: 'yesterday', label: 'Yesterday', icon: '⏪' },
-  { key: '7days', label: 'Last 7 Days', icon: '📊' },
-  { key: '30days', label: 'Last 30 Days', icon: '📈' },
+  { key: 'last7', label: 'Last 7 Days', icon: '📊' },
+  { key: 'last30', label: 'Last 30 Days', icon: '📈' },
+  { key: 'custom', label: 'Custom Date', icon: '🔍' },
 ]
 
-// ✅ Helper: get YYYY-MM-DD for a filter
-function getDateForFilter(key) {
+// ✅ Compute date/range for API
+function getQueryParams(filter, customDate) {
   const today = new Date()
-  if (key === 'today') return today
-  if (key === 'yesterday') {
+  const fmt = (d) => d.toISOString().split('T')[0]
+
+  if (filter === 'today') return {}
+  if (filter === 'yesterday') {
     const d = new Date(today)
     d.setDate(d.getDate() - 1)
-    return d
+    return { for_date: fmt(d) }
   }
-  return today
+  if (filter === 'last7') return { range_days: 7 }
+  if (filter === 'last30') return { range_days: 30 }
+  if (filter === 'custom' && customDate) return { for_date: customDate }
+  return {}
 }
 
 export default function LiveDashboard() {
@@ -51,18 +57,16 @@ export default function LiveDashboard() {
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [lastUpdated, setLastUpdated] = useState(null)
   const [error, setError] = useState(null)
-  const [dateFilter, setDateFilter] = useState('today') // ✅ NEW
+  const [filter, setFilter] = useState('today')
+  const [customDate, setCustomDate] = useState('')
   const intervalRef = useRef(null)
 
   const fetchData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
     try {
-      // ✅ Pass selected date as for_date
-      const forDate = getDateForFilter(dateFilter)
-      const dateStr = forDate.toISOString().split('T')[0]
-      const url = dateFilter === 'today'
-        ? '/dashboard/live'
-        : `/dashboard/live?for_date=${dateStr}`
+      const params = getQueryParams(filter, customDate)
+      const qs = new URLSearchParams(params).toString()
+      const url = qs ? `/dashboard/live?${qs}` : '/dashboard/live'
 
       const res = await api.get(url)
       setData(res.data)
@@ -75,22 +79,22 @@ export default function LiveDashboard() {
     } finally {
       if (!silent) setLoading(false)
     }
-  }, [dateFilter])
+  }, [filter, customDate])
 
   useEffect(() => {
     fetchData()
   }, [fetchData])
 
-  // ✅ Auto-refresh: only for "today" filter
+  // ✅ Auto-refresh only for "today"
   useEffect(() => {
     if (intervalRef.current) clearInterval(intervalRef.current)
-    if (autoRefresh && dateFilter === 'today') {
+    if (autoRefresh && filter === 'today') {
       intervalRef.current = setInterval(() => fetchData(true), REFRESH_INTERVAL_MS)
     }
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current)
     }
-  }, [autoRefresh, dateFilter, fetchData])
+  }, [autoRefresh, filter, fetchData])
 
   const canAccess = user?.role === 'pm' || user?.role === 'dev' || user?.role === 'admin'
 
@@ -126,23 +130,48 @@ export default function LiveDashboard() {
   const today = data?.today || {}
   const trend = data?.trend_7days || []
   const team = data?.team_workload || []
+  const breakdown = data?.assignment_breakdown || []
 
   const maxTrend = Math.max(1, ...trend.map(t => Math.max(t.created, t.assigned, t.closed)))
   const maxTeamActive = Math.max(1, ...team.map(t => t.total_active))
 
   const hasTrendData = trend.some(t => t.created > 0 || t.assigned > 0 || t.closed > 0)
   const hasTeamActivity = team.some(t => t.total_active > 0 || t.closed_today > 0)
+  const hasBreakdown = breakdown.length > 0
 
-  // ✅ Dynamic labels based on filter
-  const filterLabel = DATE_FILTERS.find(f => f.key === dateFilter)?.label || 'Today'
-  const isToday = dateFilter === 'today'
-  const createdLabel = isToday ? 'Created Today' : `Created (${filterLabel})`
-  const assignedLabel = isToday ? 'Assigned Today' : `Assigned (${filterLabel})`
-  const closedLabel = isToday ? 'Closed Today' : `Closed (${filterLabel})`
+  const isToday = filter === 'today'
+  const filterInfo = FILTERS.find(f => f.key === filter)
+
+  // ✅ Labels per filter
+  const getLabel = (base) => {
+    if (filter === 'today') return `${base} Today`
+    if (filter === 'yesterday') return `${base} Yesterday`
+    if (filter === 'last7') return `${base} (Last 7 Days)`
+    if (filter === 'last30') return `${base} (Last 30 Days)`
+    if (filter === 'custom' && customDate) {
+      const d = new Date(customDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+      return `${base} (${d})`
+    }
+    return base
+  }
+
+  // ✅ Header text for current view
+  const getViewDescription = () => {
+    if (filter === 'today') return new Date().toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })
+    if (filter === 'yesterday') {
+      const d = new Date()
+      d.setDate(d.getDate() - 1)
+      return d.toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })
+    }
+    if (filter === 'last7') return 'Last 7 Days (aggregate)'
+    if (filter === 'last30') return 'Last 30 Days (aggregate)'
+    if (filter === 'custom' && customDate) return new Date(customDate).toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })
+    return ''
+  }
 
   return (
     <div className="w-full max-w-none space-y-4 animate-fade-in">
-      {/* ============ HEADER ============ */}
+      {/* HEADER */}
       <div className="page-header">
         <div className="page-header-content flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-3">
@@ -168,7 +197,6 @@ export default function LiveDashboard() {
           </div>
 
           <div className="flex items-center gap-2">
-            {/* ✅ Auto-refresh only for today */}
             {isToday && (
               <button
                 onClick={() => setAutoRefresh(!autoRefresh)}
@@ -197,7 +225,7 @@ export default function LiveDashboard() {
         </div>
       </div>
 
-      {/* ============ ✅ DATE FILTER BAR ============ */}
+      {/* ✅ FILTER BAR — Today / Yesterday / 7 Days / 30 Days / Custom */}
       <div className="card">
         <div className="flex items-center gap-3 flex-wrap">
           <div className="flex items-center gap-2">
@@ -206,12 +234,12 @@ export default function LiveDashboard() {
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
-            {DATE_FILTERS.map((f) => {
-              const active = dateFilter === f.key
+            {FILTERS.map((f) => {
+              const active = filter === f.key
               return (
                 <button
                   key={f.key}
-                  onClick={() => setDateFilter(f.key)}
+                  onClick={() => setFilter(f.key)}
                   className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 ${
                     active
                       ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-lg shadow-indigo-500/30 scale-105'
@@ -225,28 +253,34 @@ export default function LiveDashboard() {
             })}
           </div>
 
+          {/* ✅ Custom date picker inline */}
+          {filter === 'custom' && (
+            <div className="flex items-center gap-2 bg-indigo-50 border-2 border-indigo-200 rounded-xl px-3 py-1.5">
+              <span className="text-xs font-semibold text-indigo-700">📅 Select Date:</span>
+              <input
+                type="date"
+                value={customDate}
+                onChange={(e) => setCustomDate(e.target.value)}
+                max={new Date().toISOString().split('T')[0]}
+                className="text-sm border-0 bg-transparent outline-none focus:ring-0 font-semibold text-indigo-900 cursor-pointer"
+              />
+            </div>
+          )}
+
           {!isToday && (
             <span className="text-xs text-gray-500 ml-auto flex items-center gap-1">
               <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-              Historical view — auto-refresh disabled
+              {filter === 'custom' ? 'Custom view — auto-refresh off' : 'Historical view — auto-refresh off'}
             </span>
           )}
         </div>
 
-        {/* ✅ Show selected date range */}
-        <div className="mt-3 flex items-center gap-3 text-xs text-gray-500 border-t border-gray-100 pt-2">
+        {/* Show current selection */}
+        <div className="mt-3 pt-2 border-t border-gray-100 flex items-center gap-2 text-xs text-gray-500">
+          <span className="text-base">{filterInfo?.icon}</span>
           <span>
-            Showing data for:{' '}
-            <strong className="text-gray-700">
-              {dateFilter === 'today' && new Date().toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
-              {dateFilter === 'yesterday' && (() => {
-                const d = new Date()
-                d.setDate(d.getDate() - 1)
-                return d.toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })
-              })()}
-              {dateFilter === '7days' && 'Last 7 Days (aggregate counts)'}
-              {dateFilter === '30days' && 'Last 30 Days (aggregate counts)'}
-            </strong>
+            Showing:{' '}
+            <strong className="text-gray-700">{getViewDescription()}</strong>
           </span>
         </div>
       </div>
@@ -273,10 +307,10 @@ export default function LiveDashboard() {
         </div>
       ) : data ? (
         <>
-          {/* ============ HERO KPI CARDS ============ */}
+          {/* KPI CARDS */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
             <KpiCard
-              label={createdLabel}
+              label={getLabel('Created')}
               value={today.created}
               icon={<PlusCircleIcon className="h-6 w-6" />}
               gradient="from-blue-500 to-indigo-600"
@@ -284,7 +318,7 @@ export default function LiveDashboard() {
               subtext="new tickets"
             />
             <KpiCard
-              label={assignedLabel}
+              label={getLabel('Assigned')}
               value={today.assigned}
               icon={<UserPlusIcon className="h-6 w-6" />}
               gradient="from-purple-500 to-violet-600"
@@ -292,7 +326,7 @@ export default function LiveDashboard() {
               subtext="to team"
             />
             <KpiCard
-              label={closedLabel}
+              label={getLabel('Closed')}
               value={today.closed}
               icon={<CheckCircleIcon className="h-6 w-6" />}
               gradient="from-emerald-500 to-teal-600"
@@ -318,16 +352,16 @@ export default function LiveDashboard() {
             />
           </div>
 
-          {/* ============ SECONDARY STATS ============ */}
+          {/* SECONDARY STATS */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <SmallStatCard
-              label={isToday ? 'Rescheduled Today' : `Rescheduled (${filterLabel})`}
+              label={getLabel('Rescheduled')}
               value={today.rescheduled}
               icon={<ArrowPathRoundedSquareIcon className="h-5 w-5" />}
               color="amber"
             />
             <SmallStatCard
-              label={isToday ? 'Reopened Today' : `Reopened (${filterLabel})`}
+              label={getLabel('Reopened')}
               value={today.reopened}
               icon={<ArrowPathIcon className="h-5 w-5" />}
               color="rose"
@@ -340,7 +374,136 @@ export default function LiveDashboard() {
             />
           </div>
 
-          {/* ============ TREND + TEAM ============ */}
+          {/* ASSIGNMENT BREAKDOWN */}
+          <div className="card bg-gradient-to-br from-slate-50 to-indigo-50 border-2 border-indigo-200">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="p-2 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg">
+                <UserGroupIcon className="h-4 w-4 text-white" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-gray-900">Assignment Breakdown</h3>
+                <p className="text-xs text-gray-500">Per-team-member load across time periods</p>
+              </div>
+              <span className="ml-auto text-xs font-bold px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full">
+                {breakdown.length} members
+              </span>
+            </div>
+
+            {!hasBreakdown ? (
+              <EmptyState
+                icon={<UserGroupIcon className="h-12 w-12" />}
+                title="No team data"
+                subtitle="No active devs/PMs found"
+                small
+              />
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b-2 border-indigo-200">
+                      <th className="text-left py-2 px-3 text-xs font-bold text-gray-600 uppercase">Member</th>
+                      <th className="text-center py-2 px-3 text-xs font-bold text-gray-600 uppercase">Today</th>
+                      <th className="text-center py-2 px-3 text-xs font-bold text-gray-600 uppercase">Yesterday</th>
+                      <th className="text-center py-2 px-3 text-xs font-bold text-gray-600 uppercase">Last 7 Days</th>
+                      <th className="text-center py-2 px-3 text-xs font-bold text-gray-600 uppercase">Last 30 Days</th>
+                      <th className="text-center py-2 px-3 text-xs font-bold text-gray-600 uppercase">Active Now</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {breakdown.map((item, idx) => {
+                      const isUnassigned = item.name === 'Unassigned'
+                      return (
+                        <tr
+                          key={item.user_id || `unassigned-${idx}`}
+                          className={`border-b border-gray-100 hover:bg-white transition-colors ${
+                            isUnassigned ? 'bg-red-50/50' : ''
+                          }`}
+                        >
+                          <td className="py-2.5 px-3">
+                            <div className="flex items-center gap-2">
+                              {isUnassigned ? (
+                                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-red-500 to-rose-600 flex items-center justify-center flex-shrink-0">
+                                  <UserMinusIcon className="h-4 w-4 text-white" />
+                                </div>
+                              ) : (
+                                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center flex-shrink-0">
+                                  <span className="text-white text-xs font-bold">
+                                    {item.name?.charAt(0)?.toUpperCase()}
+                                  </span>
+                                </div>
+                              )}
+                              <div className="min-w-0">
+                                <p className={`text-sm font-semibold truncate ${isUnassigned ? 'text-red-800' : 'text-gray-900'}`}>
+                                  {item.name}
+                                </p>
+                                {!isUnassigned && (
+                                  <p className="text-[10px] text-gray-500 capitalize">
+                                    {item.role} • {item.branch_name || '—'}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="text-center py-2.5 px-3">
+                            <span className={`inline-flex items-center justify-center min-w-[36px] h-7 px-2 rounded-lg text-xs font-bold ${
+                              item.today > 0 ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-400'
+                            }`}>
+                              {item.today}
+                            </span>
+                          </td>
+                          <td className="text-center py-2.5 px-3">
+                            <span className={`inline-flex items-center justify-center min-w-[36px] h-7 px-2 rounded-lg text-xs font-bold ${
+                              item.yesterday > 0 ? 'bg-purple-100 text-purple-800' : 'bg-gray-100 text-gray-400'
+                            }`}>
+                              {item.yesterday}
+                            </span>
+                          </td>
+                          <td className="text-center py-2.5 px-3">
+                            <span className={`inline-flex items-center justify-center min-w-[36px] h-7 px-2 rounded-lg text-xs font-bold ${
+                              item.last_7_days > 0 ? 'bg-cyan-100 text-cyan-800' : 'bg-gray-100 text-gray-400'
+                            }`}>
+                              {item.last_7_days}
+                            </span>
+                          </td>
+                          <td className="text-center py-2.5 px-3">
+                            <span className={`inline-flex items-center justify-center min-w-[36px] h-7 px-2 rounded-lg text-xs font-bold ${
+                              item.last_30_days > 0 ? 'bg-teal-100 text-teal-800' : 'bg-gray-100 text-gray-400'
+                            }`}>
+                              {item.last_30_days}
+                            </span>
+                          </td>
+                          <td className="text-center py-2.5 px-3">
+                            <span className={`inline-flex items-center justify-center min-w-[36px] h-7 px-2 rounded-lg text-xs font-bold ${
+                              item.total_active > 0 ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-gray-100 text-gray-400'
+                            }`}>
+                              {item.total_active}
+                            </span>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+
+                <div className="mt-3 flex items-center justify-center gap-4 text-[10px] text-gray-500 flex-wrap">
+                  <span className="flex items-center gap-1">
+                    <span className="w-3 h-3 rounded bg-blue-100 border border-blue-300"></span>
+                    Assigned today
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="w-3 h-3 rounded bg-purple-100 border border-purple-300"></span>
+                    Assigned yesterday
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="w-3 h-3 rounded bg-amber-100 border border-amber-300"></span>
+                    Currently active
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* TREND + TEAM */}
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-3">
             <div className="lg:col-span-3 card">
               <div className="flex items-center gap-2 mb-4">
@@ -352,28 +515,13 @@ export default function LiveDashboard() {
                   <p className="text-xs text-gray-500">Created • Assigned • Closed</p>
                 </div>
                 <div className="ml-auto flex items-center gap-3 text-xs">
-                  <span className="flex items-center gap-1.5">
-                    <span className="w-3 h-3 bg-blue-500 rounded"></span>
-                    <span className="text-gray-600">Created</span>
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <span className="w-3 h-3 bg-purple-500 rounded"></span>
-                    <span className="text-gray-600">Assigned</span>
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <span className="w-3 h-3 bg-green-500 rounded"></span>
-                    <span className="text-gray-600">Closed</span>
-                  </span>
+                  <span className="flex items-center gap-1.5"><span className="w-3 h-3 bg-blue-500 rounded"></span><span className="text-gray-600">Created</span></span>
+                  <span className="flex items-center gap-1.5"><span className="w-3 h-3 bg-purple-500 rounded"></span><span className="text-gray-600">Assigned</span></span>
+                  <span className="flex items-center gap-1.5"><span className="w-3 h-3 bg-green-500 rounded"></span><span className="text-gray-600">Closed</span></span>
                 </div>
               </div>
-
               {!hasTrendData ? (
-                <EmptyState
-                  icon={<ChartBarSquareIcon className="h-12 w-12" />}
-                  title="No activity in the last 7 days"
-                  subtitle="Create or close tickets to see trend"
-                  small
-                />
+                <EmptyState icon={<ChartBarSquareIcon className="h-12 w-12" />} title="No activity in the last 7 days" subtitle="Create or close tickets to see trend" small />
               ) : (
                 <div className="flex items-end justify-between gap-2 h-48 pt-4">
                   {trend.map((d, i) => (
@@ -398,143 +546,90 @@ export default function LiveDashboard() {
                   <UserGroupIcon className="h-4 w-4 text-white" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-gray-900">Team Workload</h3>
-                  <p className="text-xs text-gray-500">{team.length} members</p>
+                  <h3 className="text-sm font-bold text-gray-900">Active Workload</h3>
+                  <p className="text-xs text-gray-500">Currently open tickets</p>
                 </div>
               </div>
-
               {!hasTeamActivity ? (
-                <EmptyState
-                  icon={<UserGroupIcon className="h-12 w-12" />}
-                  title="Team is idle"
-                  subtitle="No active assignments yet"
-                  small
-                />
+                <EmptyState icon={<UserGroupIcon className="h-12 w-12" />} title="Team is idle" subtitle="No active assignments" small />
               ) : (
                 <div className="space-y-3 max-h-[280px] overflow-y-auto pr-1">
                   {team.map((m) => (
-                    <div key={m.user_id} className="group">
+                    <div key={m.user_id}>
                       <div className="flex items-center justify-between mb-1">
                         <div className="flex items-center gap-2 min-w-0">
                           <div className="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center flex-shrink-0">
-                            <span className="text-white text-xs font-bold">
-                              {m.name?.charAt(0)?.toUpperCase()}
-                            </span>
+                            <span className="text-white text-xs font-bold">{m.name?.charAt(0)?.toUpperCase()}</span>
                           </div>
-                          <span className="text-xs font-semibold text-gray-800 truncate" title={m.name}>
-                            {m.name}
-                          </span>
+                          <span className="text-xs font-semibold text-gray-800 truncate" title={m.name}>{m.name}</span>
                         </div>
-                        <div className="flex items-center gap-1 flex-shrink-0">
-                          {m.closed_today > 0 && (
-                            <span className="text-[10px] px-1.5 py-0.5 bg-green-100 text-green-800 rounded font-bold">
-                              ✓{m.closed_today}
-                            </span>
-                          )}
-                          {m.total_today - m.closed_today > 0 && (
-                            <span className="text-[10px] px-1.5 py-0.5 bg-purple-100 text-purple-800 rounded font-bold">
-                              +{m.total_today - m.closed_today}
-                            </span>
-                          )}
-                          <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 text-gray-700 rounded font-bold">
-                            {m.total_active}
-                          </span>
-                        </div>
+                        <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 text-gray-700 rounded font-bold flex-shrink-0">{m.total_active}</span>
                       </div>
                       <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 transition-all duration-500"
-                          style={{ width: `${(m.total_active / maxTeamActive) * 100}%` }}
-                        />
+                        <div className="h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 transition-all duration-500" style={{ width: `${(m.total_active / maxTeamActive) * 100}%` }} />
                       </div>
                     </div>
                   ))}
                 </div>
               )}
-
-              <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-center gap-3 text-[10px] text-gray-500">
-                <span className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-green-500"></span> Closed today
-                </span>
-                <span className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-purple-500"></span> Assigned today
-                </span>
-                <span className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-indigo-500"></span> Total active
-                </span>
-              </div>
             </div>
           </div>
 
-          {/* ============ TOP 10 LISTS ============ */}
+          {/* TOP 10 LISTS */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
             <LiveTopList
-              title={isToday ? 'Just Created Today' : `Created (${filterLabel})`}
+              title={getLabel('Created')}
               icon={<PlusCircleIcon className="h-4 w-4" />}
               items={data.top_created_today}
               accentColor="blue"
-              emptyText={`No tickets created ${isToday ? 'today' : 'in this period'}`}
+              emptyText="No tickets created in this period"
               renderRow={(t) => (
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="text-xs font-bold text-gray-500 flex-shrink-0">#{t.id}</span>
-                  <span className="text-sm text-gray-800 truncate flex-1" title={t.title}>
-                    {t.title}
-                  </span>
+                  <span className="text-sm text-gray-800 truncate flex-1" title={t.title}>{t.title}</span>
                   {t.priority && (
                     <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold uppercase flex-shrink-0 ${getPriorityColor(t.priority)}`}>
                       {t.priority}
                     </span>
                   )}
-                  <span className="text-[10px] text-gray-500 flex-shrink-0">
-                    {formatTime(t.created_at)}
-                  </span>
+                  <span className="text-[10px] text-gray-500 flex-shrink-0">{formatTime(t.created_at)}</span>
                 </div>
               )}
             />
 
             <LiveTopList
-              title={isToday ? 'Just Assigned Today' : `Assigned (${filterLabel})`}
+              title={getLabel('Assigned')}
               icon={<UserPlusIcon className="h-4 w-4" />}
               items={data.top_assigned_today}
               accentColor="purple"
-              emptyText={`No assignments ${isToday ? 'today' : 'in this period'}`}
+              emptyText="No assignments in this period"
               renderRow={(t) => (
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="text-xs font-bold text-gray-500 flex-shrink-0">#{t.id}</span>
-                  <span className="text-sm text-gray-800 truncate flex-1" title={t.title}>
-                    {t.title}
-                  </span>
+                  <span className="text-sm text-gray-800 truncate flex-1" title={t.title}>{t.title}</span>
                   <span className="text-xs px-1.5 py-0.5 bg-purple-100 text-purple-800 rounded font-medium flex-shrink-0">
                     → {t.assignee_name}
                   </span>
-                  <span className="text-[10px] text-gray-500 flex-shrink-0">
-                    {formatTime(t.assigned_at)}
-                  </span>
+                  <span className="text-[10px] text-gray-500 flex-shrink-0">{formatTime(t.assigned_at)}</span>
                 </div>
               )}
             />
 
             <LiveTopList
-              title={isToday ? 'Closed Today' : `Closed (${filterLabel})`}
+              title={getLabel('Closed')}
               icon={<CheckCircleIcon className="h-4 w-4" />}
               items={data.top_closed_today}
               accentColor="emerald"
-              emptyText={`No tickets closed ${isToday ? 'today' : 'in this period'}`}
+              emptyText="No tickets closed in this period"
               renderRow={(t) => (
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="text-xs font-bold text-gray-500 flex-shrink-0">#{t.id}</span>
-                  <span className="text-sm text-gray-800 truncate flex-1" title={t.title}>
-                    {t.title}
-                  </span>
+                  <span className="text-sm text-gray-800 truncate flex-1" title={t.title}>{t.title}</span>
                   {t.on_time === true && (
-                    <span className="text-[10px] px-1.5 py-0.5 bg-green-100 text-green-800 rounded-full font-bold flex-shrink-0">
-                      ✅ On Time
-                    </span>
+                    <span className="text-[10px] px-1.5 py-0.5 bg-green-100 text-green-800 rounded-full font-bold flex-shrink-0">✅ On Time</span>
                   )}
                   {t.on_time === false && (
-                    <span className="text-[10px] px-1.5 py-0.5 bg-red-100 text-red-800 rounded-full font-bold flex-shrink-0">
-                      ⚠️ Late
-                    </span>
+                    <span className="text-[10px] px-1.5 py-0.5 bg-red-100 text-red-800 rounded-full font-bold flex-shrink-0">⚠️ Late</span>
                   )}
                   {t.closing_time_hours > 0 && (
                     <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded-full font-bold flex-shrink-0">
@@ -554,31 +649,25 @@ export default function LiveDashboard() {
               renderRow={(t) => (
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="text-xs font-bold text-gray-500 flex-shrink-0">#{t.id}</span>
-                  <span className="text-sm text-gray-800 truncate flex-1" title={t.title}>
-                    {t.title}
-                  </span>
+                  <span className="text-sm text-gray-800 truncate flex-1" title={t.title}>{t.title}</span>
                   <span className="text-[10px] px-1.5 py-0.5 bg-red-100 text-red-800 rounded-full font-bold flex-shrink-0">
                     ⏰ {t.days_late}d late
                   </span>
-                  <span className="text-[10px] text-gray-500 flex-shrink-0 truncate max-w-[80px]" title={t.assignee_name}>
-                    {t.assignee_name}
-                  </span>
+                  <span className="text-[10px] text-gray-500 flex-shrink-0 truncate max-w-[80px]" title={t.assignee_name}>{t.assignee_name}</span>
                 </div>
               )}
             />
 
             <LiveTopList
-              title={isToday ? 'Rescheduled Today' : `Rescheduled (${filterLabel})`}
+              title={getLabel('Rescheduled')}
               icon={<ArrowPathRoundedSquareIcon className="h-4 w-4" />}
               items={data.top_rescheduled}
               accentColor="amber"
-              emptyText={`No reschedules ${isToday ? 'today' : 'in this period'}`}
+              emptyText="No reschedules in this period"
               renderRow={(t) => (
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="text-xs font-bold text-gray-500 flex-shrink-0">#{t.id}</span>
-                  <span className="text-sm text-gray-800 truncate flex-1" title={t.title}>
-                    {t.title}
-                  </span>
+                  <span className="text-sm text-gray-800 truncate flex-1" title={t.title}>{t.title}</span>
                   <span className="text-[10px] px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded-full font-bold flex-shrink-0">
                     {formatDateShort(t.original_date)} → {formatDateShort(t.new_date)}
                   </span>
@@ -587,14 +676,14 @@ export default function LiveDashboard() {
             />
           </div>
 
-          {/* ============ FOOTER ============ */}
+          {/* FOOTER */}
           <div className="flex items-center justify-center gap-3 py-3">
             <div className="flex items-center gap-2 px-3 py-1.5 bg-white rounded-full shadow-sm border border-gray-200">
               <span className={`w-2 h-2 rounded-full ${isToday && autoRefresh ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`}></span>
               <span className="text-xs text-gray-600 font-medium">
                 {isToday
                   ? (autoRefresh ? `Auto-refreshing every ${REFRESH_INTERVAL_MS / 1000}s` : 'Auto-refresh is OFF')
-                  : `Viewing ${filterLabel} — auto-refresh disabled`}
+                  : `Viewing ${filterInfo?.label} — auto-refresh disabled`}
               </span>
             </div>
           </div>

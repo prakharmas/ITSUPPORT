@@ -26,7 +26,6 @@ def _name_map(db: Session, user_ids: List[int]) -> dict:
 
 
 def _closing_hours_map(db: Session, ticket_ids: List[int]) -> dict:
-    """Total logged hours per ticket"""
     if not ticket_ids:
         return {}
     rows = db.query(
@@ -36,7 +35,6 @@ def _closing_hours_map(db: Session, ticket_ids: List[int]) -> dict:
     return {r.work_item_id: float(r.total or 0) for r in rows}
 
 
-# ✅ NEW: Restrict team workload to DialDesk + HQ only
 def _get_allowed_branch_ids(db: Session) -> List[int]:
     """Returns branch IDs for DialDesk and HQ only."""
     branches = db.query(Branch).filter(
@@ -45,34 +43,60 @@ def _get_allowed_branch_ids(db: Session) -> List[int]:
     return [b.id for b in branches]
 
 
-def build_live_dashboard(db: Session, for_date: Optional[date] = None) -> dict:
-    """Aggregate all live dashboard data in one pass."""
-    today = for_date or date.today()
-    today_start = _start_of_day(today)
-    today_end = _end_of_day(today)
+def build_live_dashboard(
+    db: Session,
+    for_date: Optional[date] = None,
+    range_days: Optional[int] = None,
+) -> dict:
+    """
+    for_date: reference date (defaults to today)
+    range_days: if set, aggregates over last N days ending at for_date
+                if None, only shows for_date
+    """
+    anchor = for_date or date.today()
+
+    # ✅ Compute date range
+    if range_days and range_days > 1:
+        range_start = anchor - timedelta(days=range_days - 1)
+        range_end = anchor
+        is_range = True
+    else:
+        range_start = anchor
+        range_end = anchor
+        is_range = False
+
+    range_start_dt = _start_of_day(range_start)
+    range_end_dt = _end_of_day(range_end)
+
+    today_dt = date.today()
+    yesterday_dt = today_dt - timedelta(days=1)
+    last_7_start = today_dt - timedelta(days=6)
+    last_30_start = today_dt - timedelta(days=29)
+
+    def _day_bounds(d):
+        return _start_of_day(d), _end_of_day(d)
 
     # ============================================================
-    # TODAY'S COUNTS
+    # RANGE COUNTS (created / assigned / closed in range)
     # ============================================================
     created_today = db.query(WorkItem).filter(
-        WorkItem.created_at >= today_start,
-        WorkItem.created_at <= today_end
+        WorkItem.created_at >= range_start_dt,
+        WorkItem.created_at <= range_end_dt
     ).count()
 
     assigned_today = db.query(WorkItem).filter(
         WorkItem.assignee_id.isnot(None),
-        WorkItem.assigned_at >= today_start,
-        WorkItem.assigned_at <= today_end
+        WorkItem.assigned_at >= range_start_dt,
+        WorkItem.assigned_at <= range_end_dt
     ).count()
 
     closed_today_q = db.query(WorkItem).filter(
         WorkItem.status == 'done',
-        WorkItem.completed_at >= today_start,
-        WorkItem.completed_at <= today_end
+        WorkItem.completed_at >= range_start_dt,
+        WorkItem.completed_at <= range_end_dt
     )
     closed_today = closed_today_q.count()
 
-    # Iterate in Python (timezone-safe)
     closed_tickets_today = closed_today_q.all()
     closed_on_time = 0
     closed_delayed = 0
@@ -90,21 +114,23 @@ def build_live_dashboard(db: Session, for_date: Optional[date] = None) -> dict:
 
     reopened = db.query(ItemComment).filter(
         ItemComment.body.ilike('%REOPENED%'),
-        ItemComment.created_at >= today_start,
-        ItemComment.created_at <= today_end
+        ItemComment.created_at >= range_start_dt,
+        ItemComment.created_at <= range_end_dt
     ).count()
 
     rescheduled = db.query(WorkItem).filter(
         WorkItem.is_rescheduled == True,
-        WorkItem.rescheduled_at >= today_start,
-        WorkItem.rescheduled_at <= today_end
+        WorkItem.rescheduled_at >= range_start_dt,
+        WorkItem.rescheduled_at <= range_end_dt
     ).count()
 
     now_dt = datetime.now()
+    # Overdue is always "as of anchor date"
+    overdue_ref_date = anchor
     overdue_open = db.query(WorkItem).filter(
         WorkItem.status.notin_(['done', 'rejected']),
         WorkItem.client_expected_date.isnot(None),
-        WorkItem.client_expected_date < now_dt.date()
+        WorkItem.client_expected_date < overdue_ref_date
     ).count()
 
     critical_open = db.query(WorkItem).filter(
@@ -113,11 +139,11 @@ def build_live_dashboard(db: Session, for_date: Optional[date] = None) -> dict:
     ).count()
 
     # ============================================================
-    # TREND — LAST 7 DAYS
+    # TREND — LAST 7 DAYS ENDING AT ANCHOR
     # ============================================================
     trend = []
     for i in range(6, -1, -1):
-        d = today - timedelta(days=i)
+        d = anchor - timedelta(days=i)
         ds = _start_of_day(d)
         de = _end_of_day(d)
         c = db.query(WorkItem).filter(
@@ -139,10 +165,9 @@ def build_live_dashboard(db: Session, for_date: Optional[date] = None) -> dict:
         })
 
     # ============================================================
-    # TEAM WORKLOAD — ✅ ONLY DialDesk + HQ users
+    # TEAM WORKLOAD — Only DialDesk + HQ
     # ============================================================
     allowed_branch_ids = _get_allowed_branch_ids(db)
-    print(f"✅ Live Dashboard — Allowed branch IDs (DialDesk + HQ): {allowed_branch_ids}")
 
     devs = db.query(User).filter(
         User.role.in_(['dev', 'pm']),
@@ -167,13 +192,13 @@ def build_live_dashboard(db: Session, for_date: Optional[date] = None) -> dict:
         closed_t = db.query(WorkItem).filter(
             WorkItem.assignee_id == u.id,
             WorkItem.status == 'done',
-            WorkItem.completed_at >= today_start,
-            WorkItem.completed_at <= today_end
+            WorkItem.completed_at >= range_start_dt,
+            WorkItem.completed_at <= range_end_dt
         ).count()
         assigned_t = db.query(WorkItem).filter(
             WorkItem.assignee_id == u.id,
-            WorkItem.assigned_at >= today_start,
-            WorkItem.assigned_at <= today_end
+            WorkItem.assigned_at >= range_start_dt,
+            WorkItem.assigned_at <= range_end_dt
         ).count()
 
         branch_name = None
@@ -197,11 +222,117 @@ def build_live_dashboard(db: Session, for_date: Optional[date] = None) -> dict:
     team.sort(key=lambda x: (-x['total_active'], -x['closed_today']))
 
     # ============================================================
-    # TOP 10 — CREATED TODAY
+    # ASSIGNMENT BREAKDOWN
+    # ============================================================
+    breakdown = []
+    for u in devs:
+        ts, te = _day_bounds(today_dt)
+        today_count = db.query(WorkItem).filter(
+            WorkItem.assignee_id == u.id,
+            WorkItem.assigned_at >= ts,
+            WorkItem.assigned_at <= te
+        ).count()
+
+        ys, ye = _day_bounds(yesterday_dt)
+        yesterday_count = db.query(WorkItem).filter(
+            WorkItem.assignee_id == u.id,
+            WorkItem.assigned_at >= ys,
+            WorkItem.assigned_at <= ye
+        ).count()
+
+        l7s, _ = _day_bounds(last_7_start)
+        _, l7e = _day_bounds(today_dt)
+        last7_count = db.query(WorkItem).filter(
+            WorkItem.assignee_id == u.id,
+            WorkItem.assigned_at >= l7s,
+            WorkItem.assigned_at <= l7e
+        ).count()
+
+        l30s, _ = _day_bounds(last_30_start)
+        _, l30e = _day_bounds(today_dt)
+        last30_count = db.query(WorkItem).filter(
+            WorkItem.assignee_id == u.id,
+            WorkItem.assigned_at >= l30s,
+            WorkItem.assigned_at <= l30e
+        ).count()
+
+        active_count = db.query(WorkItem).filter(
+            WorkItem.assignee_id == u.id,
+            WorkItem.status.notin_(['done', 'rejected'])
+        ).count()
+
+        branch_name = None
+        if u.branch_id:
+            b = db.query(Branch).filter(Branch.id == u.branch_id).first()
+            branch_name = b.name if b else None
+
+        breakdown.append({
+            'user_id': u.id,
+            'name': u.name,
+            'role': u.role,
+            'branch_name': branch_name,
+            'today': today_count,
+            'yesterday': yesterday_count,
+            'last_7_days': last7_count,
+            'last_30_days': last30_count,
+            'total_active': active_count,
+        })
+
+    # Unassigned
+    ts_t, te_t = _day_bounds(today_dt)
+    ys_t, ye_t = _day_bounds(yesterday_dt)
+    l7s_t, _ = _day_bounds(last_7_start)
+    l30s_t, _ = _day_bounds(last_30_start)
+
+    unassigned_today = db.query(WorkItem).filter(
+        WorkItem.assignee_id.is_(None),
+        WorkItem.created_at >= ts_t,
+        WorkItem.created_at <= te_t
+    ).count()
+
+    unassigned_yesterday = db.query(WorkItem).filter(
+        WorkItem.assignee_id.is_(None),
+        WorkItem.created_at >= ys_t,
+        WorkItem.created_at <= ye_t
+    ).count()
+
+    unassigned_last7 = db.query(WorkItem).filter(
+        WorkItem.assignee_id.is_(None),
+        WorkItem.created_at >= l7s_t,
+        WorkItem.created_at <= te_t
+    ).count()
+
+    unassigned_last30 = db.query(WorkItem).filter(
+        WorkItem.assignee_id.is_(None),
+        WorkItem.created_at >= l30s_t,
+        WorkItem.created_at <= te_t
+    ).count()
+
+    unassigned_active = db.query(WorkItem).filter(
+        WorkItem.assignee_id.is_(None),
+        WorkItem.status.notin_(['done', 'rejected'])
+    ).count()
+
+    breakdown.append({
+        'user_id': None,
+        'name': 'Unassigned',
+        'role': None,
+        'branch_name': None,
+        'today': unassigned_today,
+        'yesterday': unassigned_yesterday,
+        'last_7_days': unassigned_last7,
+        'last_30_days': unassigned_last30,
+        'total_active': unassigned_active,
+    })
+
+    breakdown.sort(key=lambda x: (0 if x['name'] == 'Unassigned' else 1, -x['total_active']))
+
+    # ============================================================
+    # TOP 10 — CREATED
     # ============================================================
     created_items = db.query(WorkItem).filter(
-        WorkItem.created_at >= today_start,
-        WorkItem.created_at <= today_end
+        WorkItem.created_at >= range_start_dt,
+        WorkItem.created_at <= range_end_dt
     ).order_by(WorkItem.created_at.desc()).limit(10).all()
 
     creator_ids = [t.reporter_id for t in created_items if t.reporter_id]
@@ -220,12 +351,12 @@ def build_live_dashboard(db: Session, for_date: Optional[date] = None) -> dict:
     ]
 
     # ============================================================
-    # TOP 10 — ASSIGNED TODAY
+    # TOP 10 — ASSIGNED
     # ============================================================
     assigned_items = db.query(WorkItem).filter(
         WorkItem.assignee_id.isnot(None),
-        WorkItem.assigned_at >= today_start,
-        WorkItem.assigned_at <= today_end
+        WorkItem.assigned_at >= range_start_dt,
+        WorkItem.assigned_at <= range_end_dt
     ).order_by(WorkItem.assigned_at.desc()).limit(10).all()
 
     assignee_ids = [t.assignee_id for t in assigned_items if t.assignee_id]
@@ -244,12 +375,12 @@ def build_live_dashboard(db: Session, for_date: Optional[date] = None) -> dict:
     ]
 
     # ============================================================
-    # TOP 10 — CLOSED TODAY
+    # TOP 10 — CLOSED
     # ============================================================
     closed_items = db.query(WorkItem).filter(
         WorkItem.status == 'done',
-        WorkItem.completed_at >= today_start,
-        WorkItem.completed_at <= today_end
+        WorkItem.completed_at >= range_start_dt,
+        WorkItem.completed_at <= range_end_dt
     ).order_by(WorkItem.completed_at.desc()).limit(10).all()
 
     closer_ids = [t.assignee_id for t in closed_items if t.assignee_id]
@@ -281,19 +412,19 @@ def build_live_dashboard(db: Session, for_date: Optional[date] = None) -> dict:
         })
 
     # ============================================================
-    # TOP 10 — OVERDUE (still open)
+    # TOP 10 — OVERDUE
     # ============================================================
     overdue_q = db.query(WorkItem).filter(
         WorkItem.status.notin_(['done', 'rejected']),
         WorkItem.client_expected_date.isnot(None),
-        WorkItem.client_expected_date < today
+        WorkItem.client_expected_date < overdue_ref_date
     ).order_by(WorkItem.client_expected_date.asc()).limit(10).all()
 
     overdue_user_ids = [t.assignee_id for t in overdue_q if t.assignee_id]
     overdue_users = _name_map(db, overdue_user_ids)
     top_overdue = []
     for t in overdue_q:
-        days_late = (today - t.client_expected_date).days if t.client_expected_date else 0
+        days_late = (overdue_ref_date - t.client_expected_date).days if t.client_expected_date else 0
         top_overdue.append({
             'id': t.id,
             'title': t.title,
@@ -306,12 +437,12 @@ def build_live_dashboard(db: Session, for_date: Optional[date] = None) -> dict:
         })
 
     # ============================================================
-    # TOP 10 — RESCHEDULED TODAY
+    # TOP 10 — RESCHEDULED
     # ============================================================
     resched_items = db.query(WorkItem).filter(
         WorkItem.is_rescheduled == True,
-        WorkItem.rescheduled_at >= today_start,
-        WorkItem.rescheduled_at <= today_end
+        WorkItem.rescheduled_at >= range_start_dt,
+        WorkItem.rescheduled_at <= range_end_dt
     ).order_by(WorkItem.rescheduled_at.desc()).limit(10).all()
 
     resched_by_ids = [t.rescheduled_by for t in resched_items if t.rescheduled_by]
@@ -355,4 +486,5 @@ def build_live_dashboard(db: Session, for_date: Optional[date] = None) -> dict:
         'top_closed_today': top_closed,
         'top_overdue': top_overdue,
         'top_rescheduled': top_rescheduled,
+        'assignment_breakdown': breakdown,
     }
